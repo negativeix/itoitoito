@@ -1,0 +1,173 @@
+@import 'tailwindcss';
+
+/* ---------- Design tokens (ITO_PLAN §2.1) ---------- */
+:root {
+  --bg: #f5efe4;
+  --surface: #fffbf4;
+  --surface-2: #ede4d3;
+  --ink: #1e1a15;
+  --ink-muted: #6e6457;
+  --thread: #e0393e;
+  --success: #2f9e6b;
+  --danger: #d6453d;
+  --line: #ddd2bf;
+
+  --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.04), 0 8px 24px -8px rgba(60, 40, 20, 0.25);
+  --shadow-lift: 0 2px 0 rgba(0, 0, 0, 0.04), 0 18px 36px -10px rgba(60, 40, 20, 0.38);
+  --noise-opacity: 0.035;
+  --noise-blend: multiply;
+
+  color-scheme: light;
+}
+
+/* "Night table" — follows the OS unless the page forces light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #17140f;
+    --surface: #221e18;
+    --surface-2: #2c2720;
+    --ink: #f3ede2;
+    --ink-muted: #a89e90;
+    --thread: #ff5a5f;
+    --success: #3dbe85;
+    --danger: #ff6b61;
+    --line: #3a342b;
+
+    --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.3), 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+    --shadow-lift: 0 2px 0 rgba(0, 0, 0, 0.3), 0 18px 36px -10px rgba(0, 0, 0, 0.75);
+    --noise-opacity: 0.04;
+    --noise-blend: screen;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #17140f;
+  --surface: #221e18;
+  --surface-2: #2c2720;
+  --ink: #f3ede2;
+  --ink-muted: #a89e90;
+  --thread: #ff5a5f;
+  --success: #3dbe85;
+  --danger: #ff6b61;
+  --line: #3a342b;
+
+  --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.3), 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  --shadow-lift: 0 2px 0 rgba(0, 0, 0, 0.3), 0 18px 36px -10px rgba(0, 0, 0, 0.75);
+  --noise-opacity: 0.04;
+  --noise-blend: screen;
+
+  color-scheme: dark;
+}
+
+/* Expose tokens to Tailwind utilities: bg-bg, text-ink, border-line, ... */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-thread: var(--thread);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-line: var(--line);
+
+  --font-sans: 'Anuphan', ui-sans-serif, system-ui, sans-serif;
+  --font-num: 'Fraunces', ui-serif, Georgia, serif;
+
+  --radius-card: 20px;
+  --radius-btn: 16px;
+
+  --shadow-card: var(--shadow-card);
+  --shadow-lift: var(--shadow-lift);
+}
+
+/* Type scale (§2.2): 12 / 14 / 16 / 20 / 24 / 32 / 48 / 96 — Thai needs line-height ≥ 1.5 */
+@theme {
+  --text-xs: 12px;
+  --text-xs--line-height: 1.5;
+  --text-sm: 14px;
+  --text-sm--line-height: 1.55;
+  --text-base: 16px;
+  --text-base--line-height: 1.6;
+  --text-lg: 20px;
+  --text-lg--line-height: 1.5;
+  --text-xl: 24px;
+  --text-xl--line-height: 1.5;
+  --text-2xl: 32px;
+  --text-2xl--line-height: 1.5;
+  --text-3xl: 48px;
+  --text-3xl--line-height: 1.2;
+  --text-4xl: 96px;
+  --text-4xl--line-height: 1;
+}
+
+/* ---------- Base ---------- */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Faint paper grain over everything (§2.3). */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: var(--noise-opacity);
+    mix-blend-mode: var(--noise-blend);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
+    min-height: 100dvh;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--thread);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .num {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* 16px side gutter plus device safe areas (§2.3). */
+  .safe-x {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  .safe-top {
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+  .safe-bottom {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+
+  /* Cards: no long-press callout / text selection, and no browser pan while dragging. */
+  .no-callout {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}

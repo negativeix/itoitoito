@@ -10,12 +10,19 @@ async function playRound(phones: Page[], order: 'asc' | 'desc') {
   for (const p of phones) values.push({ p, v: await peekValue(p) })
   values.sort((a, b) => (order === 'asc' ? a.v - b.v : b.v - a.v))
   const faceDown = (p: Page) => p.getByRole('region', { name: 'โต๊ะกลาง' }).getByRole('img', { name: /^การ์ดคว่ำของ/ })
+  const handCounts = (p: Page) => p.getByRole('list', { name: 'การ์ดในมือของแต่ละคน' })
+  // Everyone starts with their cards in hand.
+  await expect(handCounts(phones[0]).getByLabel(/เหลือ \d ใบในมือ/)).toHaveCount(phones.length)
   for (const [i, { p }] of values.entries()) {
     await dragToTable(p, 'end')
     await expect(p.getByText('การ์ดของคุณอยู่บนโต๊ะครบแล้ว')).toBeVisible()
     // Like people at a table, the next player places after seeing this card land on their own screen.
     for (const q of phones) await expect(faceDown(q)).toHaveCount(i + 1)
+    if (i < values.length - 1) await expect(handCounts(phones[0]).getByLabel(/วางครบแล้ว$/)).toHaveCount(i + 1)
+    if (i === 0) await shot(values[1].p, `hand-counts-${order}`)
   }
+  // All placed: the row goes away.
+  for (const q of phones) await expect(handCounts(q)).toHaveCount(0)
   return values
 }
 

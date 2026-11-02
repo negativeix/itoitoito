@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { createPortal } from 'react-dom'
 import { BottomBar } from '../components/BottomBar'
 import { Card } from '../components/Card'
+import { HandCounts } from '../components/HandCounts'
 import { Hearts } from '../components/Hearts'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { RuleChips } from '../components/RuleChips'
@@ -274,6 +275,7 @@ export function Play() {
       <div className="sticky top-0 z-20 -mx-4 bg-bg/95 px-4 pb-2 backdrop-blur-sm">
         <TopicBar theme={room.current_theme} />
       </div>
+      <HandCounts players={active} board={board} myPlayerId={me.id} show={!me.spectating && !allPlaced} />
       <div className="flex items-center justify-center gap-4">
         {room.mode === 'levelup' && <Hearts lives={Math.max(0, room.lives - wrongSoFar)} level={room.level} />}
         {revealed.length > 0 && (

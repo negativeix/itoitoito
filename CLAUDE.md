@@ -30,6 +30,20 @@ Vite + React 18 + TypeScript + Tailwind CSS v4 + `motion` + @dnd-kit + Zustand +
 6. Every screen has empty / loading / error states written in plain human Thai ("กำลังต่อเน็ตใหม่…", not "Error 500").
 7. Button labels are short verbs: "สร้างห้อง", "เข้าห้อง", "เริ่มเกม", "มั่นใจแล้ว", "เปิดการ์ด".
 
+## Architecture decisions (deviations from the plan, on purpose)
+- **Postgres RPCs instead of Edge Functions.** Every action in §4.4 is a `security definer` function in `supabase/migrations/0003_rpc.sql` (one transaction each, CSPRNG via `gen_random_bytes`). `lock` is named `lock_in`. Helpers prefixed `_` are not executable by clients.
+- **Realtime can't room-filter DELETE events.** Server bumps `rooms.roster_version` whenever players/cards are removed; clients refetch the snapshot when it changes. Don't rely on DELETE payloads.
+- **Never subscribe to `hands`** (not published). Putting an unpublished table in the same channel breaks the whole channel's postgres_changes.
+- **Host liveness** for migration uses the `heartbeats` table (RPC `heartbeat` every 10 s), not presence alone, so the server can verify "host gone > 20 s".
+- **Drag is custom pointer code** (not @dnd-kit) because one gesture must separate tap (clue), hold (peek) and drag. Keep the dragged card's DOM node mounted during a drag (iOS drops touch events for removed targets).
+- **Reveal driver:** host calls `reveal_next(expected_index)` every ~900 ms; if the host is offline the lowest-seat online player drives; everyone else is a slow fallback. Idempotent by design.
+- Zustand selectors must return stable references — derive arrays with `useMemo` outside the selector.
+- Small red/green text uses `--thread-ink` / `--success-ink` / `--danger-ink` (WCAG AA); brand `--thread` stays for large elements.
+
+## Testing
+- `npm run test:unit`, `npm run test:db` (needs `npx supabase start`), `npx playwright test` (needs dev server too). Run DB tests a few seconds after `db reset` (realtime restarts).
+- Any change to RLS or RPCs must keep `supabase/tests/rls.test.ts` green.
+
 ## Design quick reference (section 2)
 - Colors are CSS variables on `:root` (light + dark): `--bg --surface --surface-2 --ink --ink-muted --thread --success --danger --line`. Player colors always paired with initials.
 - Fonts: Anuphan (UI), Fraunces (numbers, tabular-nums). Thai line-height ≥ 1.5.

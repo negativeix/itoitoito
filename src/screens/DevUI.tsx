@@ -68,7 +68,6 @@ export function DevUI() {
             {...bind}
             role="button"
             tabIndex={0}
-            aria-label="การ์ดของฉัน กดค้างเพื่อดูเลข"
             className="no-callout cursor-pointer touch-none"
           >
             <Card value={secret} faceUp={held} color={PLAYER_COLORS[5].hex} initials="ฉ" className="w-48" />

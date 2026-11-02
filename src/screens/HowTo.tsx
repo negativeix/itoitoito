@@ -18,9 +18,9 @@ const SLIDES: Slide[] = [
     body: 'กดค้างที่การ์ดเพื่อแอบดูเลขของตัวเอง ห้ามให้ใครเห็น',
     art: (
       <div className="flex items-end justify-center gap-3">
-        <Card color={c(0)} initials="บ" className="w-20 -rotate-6" />
-        <Card value={64} faceUp color={c(5)} initials="ฉ" mine className="w-28" />
-        <Card color={c(3)} initials="ม" className="w-20 rotate-6" />
+        <Card color={c(0)} name="บอส" className="w-20 -rotate-6" />
+        <Card value={64} faceUp color={c(5)} name="คุณ" mine className="w-28" />
+        <Card color={c(3)} name="มิ้นท์" className="w-20 rotate-6" />
       </div>
     ),
   },
@@ -43,9 +43,9 @@ const SLIDES: Slide[] = [
     art: (
       <div className="flex items-start justify-center gap-2">
         <Card zero className="w-16" />
-        <Card color={c(3)} initials="ม" className="w-16" />
-        <Card color={c(5)} initials="ฉ" mine className="w-16" />
-        <Card color={c(0)} initials="บ" className="w-16" />
+        <Card color={c(3)} name="มิ้นท์" className="w-16" />
+        <Card color={c(5)} name="คุณ" mine className="w-16" />
+        <Card color={c(0)} name="บอส" className="w-16" />
       </div>
     ),
   },
@@ -55,9 +55,9 @@ const SLIDES: Slide[] = [
     art: (
       <div className="flex items-start justify-center gap-2">
         <Card zero className="w-16" />
-        <Card value={18} faceUp color={c(3)} initials="ม" className="w-16" />
-        <Card value={64} faceUp color={c(5)} initials="ฉ" className="w-16" />
-        <Card value={51} faceUp wrong color={c(0)} initials="บ" className="w-16" />
+        <Card value={18} faceUp color={c(3)} name="มิ้นท์" className="w-16" />
+        <Card value={64} faceUp color={c(5)} name="คุณ" className="w-16" />
+        <Card value={51} faceUp wrong color={c(0)} name="บอส" className="w-16" />
       </div>
     ),
   },

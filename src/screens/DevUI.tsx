@@ -70,7 +70,7 @@ export function DevUI() {
             tabIndex={0}
             className="no-callout cursor-pointer touch-none"
           >
-            <Card value={secret} faceUp={held} color={PLAYER_COLORS[5].hex} initials="ฉ" className="w-48" />
+            <Card value={secret} faceUp={held} color={PLAYER_COLORS[5].hex} name="คุณ" className="w-48" />
           </div>
           <p className="text-sm text-ink-muted" aria-live="polite">
             {held ? 'ปล่อยนิ้วเพื่อคว่ำการ์ด' : 'กดค้างที่การ์ดเพื่อดูเลข · สลับแอปแล้วเลขต้องหายทันที'}
@@ -84,13 +84,13 @@ export function DevUI() {
       <Section title="การ์ด">
         <div className="flex flex-wrap gap-x-3 gap-y-6">
           <Card zero className="w-24" />
-          <Card color={PLAYER_COLORS[0].hex} initials="บ" className="w-24" />
-          <Card color={PLAYER_COLORS[2].hex} initials="ม" className="w-24" mine />
-          <Card value={1} faceUp color={PLAYER_COLORS[3].hex} initials="จ" className="w-24" />
-          <Card value={42} faceUp color={PLAYER_COLORS[6].hex} initials="ไ" className="w-24" />
-          <Card value={100} faceUp color={PLAYER_COLORS[9].hex} initials="ต" className="w-24" />
-          <Card value={37} faceUp wrong color={PLAYER_COLORS[7].hex} initials="แ" className="w-24" label="การ์ดเลข 37 วางผิด" />
-          <Card color={PLAYER_COLORS[4].hex} initials="N" className="w-24" lifted={lifted} />
+          <Card color={PLAYER_COLORS[0].hex} name="บอส" className="w-24" />
+          <Card color={PLAYER_COLORS[2].hex} name="มิ้นท์" className="w-24" mine />
+          <Card value={1} faceUp color={PLAYER_COLORS[3].hex} name="เจ" className="w-24" />
+          <Card value={42} faceUp color={PLAYER_COLORS[6].hex} name="ไอซ์" className="w-24" />
+          <Card value={100} faceUp color={PLAYER_COLORS[9].hex} name="ปลาทองตัวน้อย" className="w-24" />
+          <Card value={37} faceUp wrong color={PLAYER_COLORS[7].hex} name="แพร" className="w-24" label="การ์ดเลข 37 วางผิด" />
+          <Card color={PLAYER_COLORS[4].hex} name="Nina" className="w-24" lifted={lifted} />
         </div>
         <div className="mt-6 grid grid-cols-2 gap-3">
           <PrimaryButton variant="secondary" onClick={() => setAllUp((v) => !v)}>
@@ -102,7 +102,7 @@ export function DevUI() {
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
           {[12, 58, 73, 91, 5, 100].map((v, i) => (
-            <Card key={v} value={v} faceUp={allUp} color={PLAYER_COLORS[i].hex} initials={initialOf(SAMPLE_NAMES[i])} className="w-[calc((100%-36px)/4)]" />
+            <Card key={v} value={v} faceUp={allUp} color={PLAYER_COLORS[i].hex} name={SAMPLE_NAMES[i]} className="w-[calc((100%-36px)/4)]" />
           ))}
         </div>
       </Section>

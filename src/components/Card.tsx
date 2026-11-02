@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from 'motion/react'
+import { useLayoutEffect, useRef } from 'react'
 import { flipTransition, paperSpring } from '../lib/motion'
 import { inkOn } from '../lib/players'
 import { ThreadCoil } from './ThreadCoil'
@@ -12,7 +13,9 @@ type CardProps = {
   zero?: boolean
   /** Owner's player color (top strip). */
   color?: string
-  /** Owner's initial, always shown with the color. */
+  /** Owner's name, shown centered in the top strip (shrinks, then truncates with …). */
+  name?: string
+  /** Fallback label when no name is given (e.g. illustrations). */
   initials?: string
   /** Mark as the viewer's own card: red-thread ring + "ของฉัน" tag. */
   mine?: boolean
@@ -26,12 +29,15 @@ type CardProps = {
 }
 
 const cardShell = 'absolute inset-0 overflow-hidden rounded-card border bg-surface [backface-visibility:hidden]'
+// Name strip height: 17% of the card, never below 17px so small table cards stay readable.
+const STRIP = 'max(17px, 17%)'
 
 export function Card({
   value,
   faceUp = false,
   zero = false,
   color = 'var(--ink-muted)',
+  name,
   initials = '',
   mine = false,
   wrong = false,
@@ -57,17 +63,18 @@ export function Card({
   }
 
   const showFace = faceUp && value != null
-  const ariaLabel = label ?? (showFace ? `การ์ดเลข ${value}` : initials ? `การ์ดคว่ำของ ${initials}` : 'การ์ดคว่ำ')
+  const stripText = name ?? initials
+  const ariaLabel = label ?? (showFace ? `การ์ดเลข ${value}` : stripText ? `การ์ดคว่ำของ ${stripText}` : 'การ์ดคว่ำ')
   const borderClass = wrong ? 'border-2 border-danger' : 'border-line'
 
   const face = (
     <div className={`${cardShell} ${borderClass}`} style={reduce ? undefined : { transform: 'rotateY(180deg)' }}>
-      <Strip color={color} initials={initials} />
+      <Strip color={color} text={stripText} />
       {showFace && (
         <>
           <Corners text={String(value)} ink="var(--ink)" offsetTop />
           <div
-            className={`num absolute inset-0 grid place-items-center pt-[8%] leading-none font-bold text-ink ${
+            className={`num absolute inset-0 grid place-items-center pt-[12%] leading-none font-bold text-ink ${
               value === 100 ? 'text-[36cqw]' : 'text-[46cqw]'
             }`}
           >
@@ -80,8 +87,11 @@ export function Card({
 
   const back = (
     <div className={`${cardShell} ${borderClass}`}>
-      <Strip color={color} initials={initials} />
-      <div className="absolute inset-[18%_9%_7%] grid place-items-center rounded-[12px] border border-dashed border-line">
+      <Strip color={color} text={stripText} />
+      <div
+        className="absolute inset-x-[9%] bottom-[7%] grid place-items-center rounded-[12px] border border-dashed border-line"
+        style={{ top: `calc(${STRIP} + 5%)` }}
+      >
         <ThreadCoil width={100} height={44} loops={3} strokeWidth={3} className="w-[80%]" />
       </div>
     </div>
@@ -126,12 +136,36 @@ export function Card({
   )
 }
 
-function Strip({ color, initials }: { color: string; initials: string }) {
+function Strip({ color, text }: { color: string; text: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+
+  // Shrink the name down to 10px to fit; anything still too long is cut with an ellipsis.
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const fit = () => {
+      el.style.fontSize = ''
+      let size = parseFloat(getComputedStyle(el).fontSize)
+      while (el.scrollWidth > el.clientWidth && size > 10) {
+        size -= 0.5
+        el.style.fontSize = `${size}px`
+      }
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [text])
+
   return (
-    <div className="absolute inset-x-0 top-0 flex h-[13%] items-center px-[7%]" style={{ background: color }}>
-      {initials && (
-        <span className="text-[9cqw] leading-none font-bold" style={{ color: color.startsWith('#') ? inkOn(color) : '#fff' }}>
-          {initials}
+    <div className="absolute inset-x-0 top-0 flex items-center px-[9%]" style={{ background: color, height: STRIP }}>
+      {text && (
+        <span
+          ref={ref}
+          className="block w-full truncate text-center text-[clamp(10px,11cqw,15px)] leading-tight font-bold"
+          style={{ color: color.startsWith('#') ? inkOn(color) : '#fff' }}
+        >
+          {text}
         </span>
       )}
     </div>
@@ -142,7 +176,7 @@ function Corners({ text, ink, offsetTop = false }: { text: string; ink: string; 
   const cls = 'num absolute text-[11cqw] leading-none font-semibold'
   return (
     <>
-      <span className={`${cls} left-[8%] ${offsetTop ? 'top-[17%]' : 'top-[6%]'}`} style={{ color: ink }}>
+      <span className={`${cls} left-[8%]`} style={{ color: ink, top: offsetTop ? `calc(${STRIP} + 4%)` : '6%' }}>
         {text}
       </span>
       <span className={`${cls} right-[8%] bottom-[6%] rotate-180`} style={{ color: ink }}>

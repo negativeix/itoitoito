@@ -13,7 +13,6 @@ import { TopicBar } from '../components/TopicBar'
 import { api } from '../lib/api'
 import { positionAt } from '../lib/fractional'
 import { haptics } from '../lib/haptics'
-import { initialOf } from '../lib/players'
 import { loadSnapshot, sendDrag } from '../lib/realtime'
 import { sound } from '../lib/sound'
 import { readLocal, writeLocal } from '../lib/storage'
@@ -333,7 +332,7 @@ export function Play() {
                         value={values[c.card_id]}
                         faceUp={peekId === c.card_id}
                         color={me.color}
-                        initials={initialOf(me.name)}
+                        name={me.name}
                       />
                     </div>
                     <button
@@ -382,7 +381,7 @@ export function Play() {
         createPortal(
           <motion.div className="pointer-events-none fixed top-0 left-0 z-50 w-24" style={{ x: fx, y: fy, translateX: '-50%', translateY: '-60%' }}>
             {/* Face-down while dragging: the number is never shown in motion. */}
-            <Card lifted color={me.color} initials={initialOf(me.name)} className="w-full" />
+            <Card lifted color={me.color} name={me.name} className="w-full" />
           </motion.div>,
           document.body,
         )}

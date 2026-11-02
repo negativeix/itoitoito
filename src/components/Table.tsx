@@ -1,7 +1,6 @@
 import { motion, useReducedMotion } from 'motion/react'
 import { forwardRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { paperSpring } from '../lib/motion'
-import { initialOf } from '../lib/players'
 import type { BoardCard, Player } from '../lib/types'
 import type { Ghost } from '../store/roomStore'
 import { Card } from './Card'
@@ -178,7 +177,7 @@ export const Table = forwardRef<HTMLDivElement, Props>(function Table(
                     value={revealed ? c.revealed_value : peeking ? myValues[c.card_id] : null}
                     faceUp={revealed || peeking}
                     color={owner?.color}
-                    initials={owner ? initialOf(owner.name) : '?'}
+                    name={owner?.name ?? 'ผู้เล่น'}
                     mine={mine && !revealed}
                     wrong={revealed && !!c.is_wrong}
                     label={
@@ -220,9 +219,7 @@ function ClueTag({ clue, name, open, onToggle, mine }: { clue: string | null; na
         >
           {clue}
         </button>
-      ) : (
-        <span className="max-w-full truncate text-[11px] text-ink-muted">{name}</span>
-      )}
+      ) : null}
     </div>
   )
 }

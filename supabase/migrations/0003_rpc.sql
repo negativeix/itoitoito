@@ -1,6 +1,13 @@
 -- Server-authoritative game logic (ITO_PLAN §4.4).
 -- Every client action is one of these security-definer RPCs, running in a single transaction.
 -- Errors are raised as short codes (e.g. 'not_host'); the client maps them to Thai messages.
+--
+-- Round flow (played like the real card game):
+--   choosing_theme  any player sets the topic (own idea or a suggestion); host deals
+--   placing         everyone places their face-down cards; once all are on the table the owner
+--                   of the leftmost face-down card flips it. Between flips everyone may keep
+--                   rearranging their remaining face-down cards (always right of revealed ones).
+--   result          every card revealed (or, in Level Up, hearts ran out)
 
 -- ---------------------------------------------------------------- helpers
 
@@ -38,12 +45,16 @@ begin
   return code;
 end $$;
 
+create or replace function public._clean_text(p text, max_len int) returns text
+language sql immutable as $$
+  select btrim(left(regexp_replace(btrim(coalesce(p, '')), '\s+', ' ', 'g'), max_len))
+$$;
+
 create or replace function public._clean_name(p_name text) returns text
 language plpgsql immutable as $$
 declare
-  v text := left(regexp_replace(btrim(coalesce(p_name, '')), '\s+', ' ', 'g'), 16);
+  v text := public._clean_text(p_name, 16);
 begin
-  v := btrim(v);
   if v = '' then
     raise exception 'invalid_name';
   end if;
@@ -94,77 +105,28 @@ language sql immutable as $$
   select case when r.mode = 'levelup' then r.level else r.cards_per_player end
 $$;
 
--- Picks a random theme from the room's categories, avoiding ones already used in this room.
-create or replace function public._pick_theme(p_room uuid) returns jsonb
-language plpgsql volatile set search_path = public, extensions as $$
-declare
-  r rooms;
-  t jsonb;
-begin
-  select * into r from rooms where id = p_room;
-  select to_jsonb(th) into t from themes th
-  where th.category = any (r.theme_categories) and not (th.id = any (r.used_theme_ids))
-  order by gen_random_bytes(8) limit 1;
-
-  if t is null then
-    -- Category exhausted: start recycling, but never repeat the current theme back to back.
-    select to_jsonb(th) into t from themes th
-    where th.category = any (r.theme_categories) and th.id is distinct from (r.current_theme ->> 'id')
-    order by gen_random_bytes(8) limit 1;
-    update rooms set used_theme_ids = '{}' where id = p_room;
-  end if;
-
-  if t is null then
-    raise exception 'no_themes';
-  end if;
-
-  update rooms
-  set current_theme = t, used_theme_ids = array_append(used_theme_ids, t ->> 'id')
-  where id = p_room;
-  return t;
-end $$;
-
 -- Resets per-round state and opens the topic for a new round.
 create or replace function public._begin_round(p_room uuid) returns void
 language plpgsql as $$
 begin
   delete from players where room_id = p_room and left_at is not null;
-  update players set spectating = false, locked = false, wants_reroll = false where room_id = p_room;
+  update players set spectating = false where room_id = p_room;
   delete from hands where room_id = p_room; -- cascades to board_cards
   update rooms
-  set round = round + 1, status = 'choosing_theme', theme_rerolls = 0,
-      reveal_index = -1, last_reveal_at = null, last_result = null
+  set round = round + 1, status = 'choosing_theme', current_theme = null, reveal_index = -1, last_result = null
   where id = p_room;
-  perform public._pick_theme(p_room);
 end $$;
 
--- When every active player is locked in, freeze the order and start revealing.
-create or replace function public._maybe_start_reveal(p_room uuid) returns boolean
-language plpgsql as $$
-declare
-  r rooms;
-begin
-  select * into r from rooms where id = p_room;
-  if r.status <> 'placing' then
-    return false;
-  end if;
-  if public._active_count(p_room) = 0
-     or exists (select 1 from players where room_id = p_room and left_at is null and not spectating and not locked)
-     or exists (select 1 from board_cards where room_id = p_room and round = r.round and position is null) then
-    return false;
-  end if;
+-- The leftmost face-down card of the round (null when everything is revealed).
+create or replace function public._next_card(p_room uuid, p_round int) returns uuid
+language sql stable as $$
+  select card_id from board_cards
+  where room_id = p_room and round = p_round and revealed_value is null and position is not null
+  order by position, card_id limit 1
+$$;
 
-  update board_cards b set reveal_order = o.rn - 1
-  from (
-    select card_id, row_number() over (order by position, card_id) as rn
-    from board_cards where room_id = p_room and round = r.round
-  ) o
-  where b.card_id = o.card_id;
-
-  update rooms set status = 'revealing', reveal_index = -1, last_reveal_at = now() where id = p_room;
-  return true;
-end $$;
-
+-- Ends the round: scores it, and reveals any cards left face down (Level Up game over) so the
+-- result list is complete. Those cards are shown but not judged (is_wrong stays null).
 create or replace function public._finish_round(p_room uuid) returns void
 language plpgsql as $$
 declare
@@ -174,6 +136,13 @@ declare
   v_lives int;
 begin
   select * into r from rooms where id = p_room;
+
+  update board_cards b set revealed_value = h.value, reveal_order = r.reveal_index + o.rn
+  from hands h,
+       (select card_id, row_number() over (order by position nulls last, card_id) as rn
+        from board_cards where room_id = p_room and round = r.round and revealed_value is null) o
+  where b.card_id = o.card_id and h.card_id = b.card_id;
+
   select count(*) filter (where is_wrong), count(*) into v_wrong, v_total
   from board_cards where room_id = p_room and round = r.round;
 
@@ -194,46 +163,45 @@ begin
   where id = p_room;
 end $$;
 
--- Reveals the card with reveal_order = reveal_index + 1. Rule §1.1.8: a card is wrong
--- when it is lower than the highest value revealed before it.
-create or replace function public._reveal_one(p_room uuid) returns void
+-- Flips one card. Rule §1.1.8: wrong when lower than the highest value revealed before it.
+create or replace function public._reveal(p_room uuid, p_card uuid) returns void
 language plpgsql as $$
 declare
   r rooms;
-  v_card uuid;
   v_value int;
   v_max int;
-  v_total int;
+  v_wrong int;
 begin
   select * into r from rooms where id = p_room;
-  select b.card_id, h.value into v_card, v_value
-  from board_cards b join hands h on h.card_id = b.card_id
-  where b.room_id = p_room and b.round = r.round and b.reveal_order = r.reveal_index + 1;
-  if v_card is null then
-    return;
-  end if;
-
+  select value into v_value from hands where card_id = p_card;
   select coalesce(max(revealed_value), 0) into v_max
   from board_cards where room_id = p_room and round = r.round and revealed_value is not null;
 
-  update board_cards set revealed_value = v_value, is_wrong = v_value < v_max where card_id = v_card;
-  update rooms set reveal_index = reveal_index + 1, last_reveal_at = now() where id = p_room;
+  update board_cards
+  set revealed_value = v_value, is_wrong = v_value < v_max, reveal_order = r.reveal_index + 1
+  where card_id = p_card;
+  update rooms set reveal_index = reveal_index + 1 where id = p_room;
 
-  select count(*) into v_total from board_cards where room_id = p_room and round = r.round;
-  if r.reveal_index + 1 >= v_total - 1 then
+  select count(*) filter (where is_wrong) into v_wrong from board_cards where room_id = p_room and round = r.round;
+  if public._next_card(p_room, r.round) is null
+     or (r.mode = 'levelup' and r.lives - v_wrong <= 0) then
     perform public._finish_round(p_room);
   end if;
 end $$;
 
--- Removes a player. During reveal/result their cards must stay on the table, so they are only
--- marked as left and cleaned up when the next round begins.
+-- Removes a player. Once cards have been revealed their revealed cards must stay on the table,
+-- so they are only marked as left (face-down cards are taken out) and cleaned up next round.
 create or replace function public._remove_player(r rooms, p players) returns void
 language plpgsql as $$
 declare
   v_new_host uuid;
 begin
-  if r.status in ('revealing', 'result', 'game_over') then
-    update players set left_at = now(), locked = false where id = p.id;
+  if r.status in ('result', 'game_over')
+     or (r.status = 'placing' and exists (
+       select 1 from board_cards where owner_player_id = p.id and round = r.round and revealed_value is not null)) then
+    delete from hands h using board_cards b
+    where b.card_id = h.card_id and b.owner_player_id = p.id and b.revealed_value is null;
+    update players set left_at = now() where id = p.id;
   else
     delete from hands where room_id = r.id and owner_user_id = p.user_id;
     delete from players where id = p.id;
@@ -253,8 +221,10 @@ begin
     update rooms set host_user_id = v_new_host where id = r.id;
   end if;
 
-  if r.status = 'placing' then
-    perform public._maybe_start_reveal(r.id);
+  -- Their face-down cards were the only ones left: the round is over.
+  if r.status = 'placing' and r.reveal_index >= 0 and public._next_card(r.id, r.round) is null
+     and not exists (select 1 from board_cards where room_id = r.id and round = r.round and position is null) then
+    perform public._finish_round(r.id);
   end if;
 end $$;
 
@@ -303,11 +273,11 @@ begin
     raise exception 'room_not_found';
   end if;
   r := public._lock_room(v_room_id);
-  v_spectating := r.status in ('placing', 'revealing');
+  v_spectating := r.status = 'placing';
 
   select * into p from players where room_id = r.id and user_id = uid;
   if found then
-    -- Rejoin (refresh, screen lock, or coming back after leaving mid-reveal).
+    -- Rejoin (refresh, screen lock, or coming back after leaving).
     if p.left_at is not null then
       update players set left_at = null, spectating = v_spectating where id = p.id;
     end if;
@@ -393,12 +363,10 @@ begin
   end;
 end $$;
 
-create or replace function public.update_settings(p_room uuid, p_mode game_mode, p_cards int, p_categories text[])
-returns void
+create or replace function public.update_settings(p_room uuid, p_mode game_mode, p_cards int) returns void
 language plpgsql security definer set search_path = public as $$
 declare
   r rooms := public._lock_room(p_room);
-  v_categories text[];
 begin
   perform public._require_host(r);
   if r.status <> 'lobby' then
@@ -407,12 +375,7 @@ begin
   if p_cards is null or p_cards not between 1 and 3 then
     raise exception 'invalid_settings';
   end if;
-  select array_agg(distinct c order by c) into v_categories
-  from unnest(p_categories) c where c in (select category from themes);
-  if v_categories is null or cardinality(v_categories) = 0 then
-    raise exception 'invalid_settings';
-  end if;
-  update rooms set mode = p_mode, cards_per_player = p_cards, theme_categories = v_categories where id = p_room;
+  update rooms set mode = p_mode, cards_per_player = p_cards where id = p_room;
 end $$;
 
 -- Host migration (§4.6). The host may hand over directly; anyone else may only take over
@@ -509,65 +472,38 @@ declare
 begin
   perform public._require_host(r);
   delete from players where room_id = p_room and left_at is not null;
-  update players set spectating = false, locked = false, wants_reroll = false where room_id = p_room;
+  update players set spectating = false where room_id = p_room;
   delete from hands where room_id = p_room;
   update rooms
-  set status = 'lobby', level = 1, lives = 3, current_theme = null, theme_rerolls = 0,
-      reveal_index = -1, last_reveal_at = null, last_result = null
+  set status = 'lobby', level = 1, lives = 3, current_theme = null, reveal_index = -1, last_result = null
   where id = p_room;
 end $$;
 
 -- ---------------------------------------------------------------- topic
 
-create or replace function public.vote_reroll(p_room uuid) returns void
-language plpgsql security definer set search_path = public as $$
-declare
-  r rooms := public._lock_room(p_room);
-  me players := public._my_player(p_room);
-  v_votes int;
-begin
-  if r.status <> 'choosing_theme' then
-    raise exception 'wrong_phase';
-  end if;
-  if me.spectating then
-    raise exception 'spectating';
-  end if;
-  if r.theme_rerolls >= 2 and not me.wants_reroll then
-    raise exception 'no_rerolls_left';
-  end if;
-  update players set wants_reroll = not wants_reroll where id = me.id;
-
-  select count(*) into v_votes from players
-  where room_id = p_room and left_at is null and not spectating and wants_reroll;
-  if r.theme_rerolls < 2 and v_votes * 2 > public._active_count(p_room) then
-    perform public._pick_theme(p_room);
-    update rooms set theme_rerolls = theme_rerolls + 1 where id = p_room;
-    update players set wants_reroll = false where room_id = p_room;
-  end if;
-end $$;
-
-create or replace function public.set_custom_theme(p_room uuid, p_title text, p_low text, p_high text) returns void
+-- Any player in the round can set the topic: their own idea or a suggestion from the app.
+create or replace function public.set_theme(p_room uuid, p_title text, p_low text, p_high text, p_source_id text default null)
+returns void
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   r rooms := public._lock_room(p_room);
-  v_title text := btrim(coalesce(p_title, ''));
-  v_low text := btrim(coalesce(p_low, ''));
-  v_high text := btrim(coalesce(p_high, ''));
+  me players := public._my_player(p_room);
+  v_title text := public._clean_text(p_title, 60);
+  v_low text := public._clean_text(p_low, 24);
+  v_high text := public._clean_text(p_high, 24);
 begin
-  perform public._require_host(r);
   if r.status <> 'choosing_theme' then
     raise exception 'wrong_phase';
   end if;
-  if char_length(v_title) not between 1 and 60 or char_length(v_low) not between 1 and 24
-     or char_length(v_high) not between 1 and 24 then
+  if v_title = '' or v_low = '' or v_high = '' then
     raise exception 'invalid_theme';
   end if;
   update rooms
   set current_theme = jsonb_build_object(
-        'id', 'custom-' || encode(gen_random_bytes(4), 'hex'), 'category', 'custom',
-        'title', v_title, 'low', v_low, 'high', v_high)
+        'id', coalesce(left(p_source_id, 40), 'custom-' || encode(gen_random_bytes(4), 'hex')),
+        'category', case when p_source_id is null then 'custom' else 'suggested' end,
+        'title', v_title, 'low', v_low, 'high', v_high, 'set_by', me.name)
   where id = p_room;
-  update players set wants_reroll = false where room_id = p_room;
 end $$;
 
 -- Deals n unique numbers per active player from 1–100, shuffled with a CSPRNG.
@@ -577,10 +513,14 @@ declare
   r rooms := public._lock_room(p_room);
   v_n int := public._cards_per_player(r);
   v_players int := public._active_count(p_room);
+  v_entry jsonb;
 begin
   perform public._require_host(r);
   if r.status <> 'choosing_theme' then
     raise exception 'wrong_phase';
+  end if;
+  if r.current_theme is null then
+    raise exception 'no_theme';
   end if;
   if v_players < 2 then
     raise exception 'need_two_players';
@@ -606,11 +546,24 @@ begin
   from hands h join players p on p.room_id = h.room_id and p.user_id = h.owner_user_id
   where h.room_id = p_room and h.round = r.round;
 
-  update players set locked = false, wants_reroll = false where room_id = p_room;
-  update rooms set status = 'placing' where id = p_room;
+  -- Remember the topic for this room (newest first, deduped by title, max 30).
+  v_entry := r.current_theme - 'set_by';
+  update rooms
+  set status = 'placing',
+      theme_history = (
+        select coalesce(jsonb_agg(e), '[]'::jsonb) from (
+          select e from (
+            select v_entry as e, 0 as ord
+            union all
+            select e, ord from jsonb_array_elements(r.theme_history) with ordinality as t (e, ord)
+            where e ->> 'title' <> v_entry ->> 'title'
+          ) all_e order by ord limit 30
+        ) limited
+      )
+  where id = p_room;
 end $$;
 
--- ---------------------------------------------------------------- placing
+-- ---------------------------------------------------------------- placing & flipping
 
 create or replace function public.move_card(p_card uuid, p_position double precision) returns void
 language plpgsql security definer set search_path = public as $$
@@ -618,6 +571,7 @@ declare
   b board_cards;
   r rooms;
   me players;
+  v_floor double precision;
 begin
   select * into b from board_cards where card_id = p_card;
   if not found then
@@ -631,13 +585,21 @@ begin
   if r.status <> 'placing' or b.round <> r.round then
     raise exception 'wrong_phase';
   end if;
-  if p_position is not null and (p_position = 'NaN'::float8 or p_position in ('Infinity'::float8, '-Infinity'::float8)) then
-    raise exception 'invalid_position';
+  if b.revealed_value is not null then
+    raise exception 'card_revealed';
   end if;
-
+  if p_position is not null then
+    if p_position = 'NaN'::float8 or p_position in ('Infinity'::float8, '-Infinity'::float8) then
+      raise exception 'invalid_position';
+    end if;
+    -- Face-down cards always stay to the right of the revealed ones.
+    select max(position) into v_floor from board_cards
+    where room_id = b.room_id and round = r.round and revealed_value is not null;
+    if v_floor is not null and p_position <= v_floor then
+      raise exception 'invalid_position';
+    end if;
+  end if;
   update board_cards set position = p_position where card_id = p_card;
-  -- Any move after people locked in means everyone has to confirm again (§1.1.6).
-  update players set locked = false where room_id = b.room_id and locked;
 end $$;
 
 create or replace function public.set_clue(p_card uuid, p_clue text) returns void
@@ -666,63 +628,60 @@ begin
   update board_cards set clue = v_clue where card_id = p_card;
 end $$;
 
-create or replace function public.lock_in(p_room uuid, p_locked boolean) returns void
+-- The owner of the leftmost face-down card flips it (the host may flip for someone offline).
+-- p_card is the card the caller saw as next: if someone just moved a card in front of it the
+-- call fails with 'order_changed' instead of flipping the wrong card. Repeated calls are no-ops.
+create or replace function public.flip_next(p_room uuid, p_card uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare
   r rooms := public._lock_room(p_room);
   me players := public._my_player(p_room);
+  b board_cards;
+  v_next uuid;
 begin
   if r.status <> 'placing' then
     raise exception 'wrong_phase';
   end if;
-  if me.spectating then
-    raise exception 'spectating';
+  select * into b from board_cards where card_id = p_card and room_id = p_room and round = r.round;
+  if not found then
+    raise exception 'card_not_found';
   end if;
-  if p_locked and exists (
-    select 1 from board_cards where owner_player_id = me.id and round = r.round and position is null
-  ) then
+  if b.revealed_value is not null then
+    return; -- already flipped (double tap)
+  end if;
+  if exists (select 1 from board_cards where room_id = p_room and round = r.round and position is null) then
     raise exception 'cards_not_placed';
   end if;
-  update players set locked = p_locked where id = me.id;
-  if p_locked then
-    perform public._maybe_start_reveal(p_room);
+  v_next := public._next_card(p_room, r.round);
+  if v_next is distinct from p_card then
+    raise exception 'order_changed';
   end if;
+  if b.owner_player_id <> me.id and r.host_user_id <> me.user_id then
+    raise exception 'not_your_turn';
+  end if;
+  perform public._reveal(p_room, p_card);
 end $$;
 
--- ---------------------------------------------------------------- reveal
-
--- Idempotent: only acts when p_expected matches the current reveal_index, so duplicate calls
--- (double taps, two clients driving after a host drop) never reveal twice.
-create or replace function public.reveal_next(p_room uuid, p_expected int) returns int
-language plpgsql security definer set search_path = public as $$
-declare
-  r rooms := public._lock_room(p_room);
-  me players := public._my_player(p_room);
-begin
-  if r.status <> 'revealing' or r.reveal_index <> p_expected then
-    return r.reveal_index;
-  end if;
-  -- Pace guard for non-hosts so a takeover can't machine-gun the reveal.
-  if me.user_id <> r.host_user_id and r.last_reveal_at > now() - interval '600 milliseconds' then
-    return r.reveal_index;
-  end if;
-  perform public._reveal_one(p_room);
-  return r.reveal_index + 1;
-end $$;
-
+-- Host shortcut: flip everything that is left, in table order.
 create or replace function public.reveal_all(p_room uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare
   r rooms := public._lock_room(p_room);
+  v_next uuid;
 begin
   perform public._require_host(r);
-  if r.status <> 'revealing' then
-    return;
+  if r.status <> 'placing' then
+    raise exception 'wrong_phase';
+  end if;
+  if exists (select 1 from board_cards where room_id = p_room and round = r.round and position is null) then
+    raise exception 'cards_not_placed';
   end if;
   for i in 1..100 loop
     select * into r from rooms where id = p_room;
-    exit when r.status <> 'revealing';
-    perform public._reveal_one(p_room);
+    exit when r.status <> 'placing';
+    v_next := public._next_card(p_room, r.round);
+    exit when v_next is null;
+    perform public._reveal(p_room, v_next);
   end loop;
 end $$;
 
@@ -758,18 +717,16 @@ grant execute on function
   public.leave_room(uuid),
   public.kick_player(uuid, uuid),
   public.set_color(uuid, text),
-  public.update_settings(uuid, game_mode, int, text[]),
+  public.update_settings(uuid, game_mode, int),
   public.transfer_host(uuid, uuid),
   public.heartbeat(uuid),
   public.start_round(uuid),
   public.next_round(uuid),
   public.back_to_lobby(uuid),
-  public.vote_reroll(uuid),
-  public.set_custom_theme(uuid, text, text, text),
+  public.set_theme(uuid, text, text, text, text),
   public.confirm_theme(uuid),
   public.move_card(uuid, double precision),
   public.set_clue(uuid, text),
-  public.lock_in(uuid, boolean),
-  public.reveal_next(uuid, int),
+  public.flip_next(uuid, uuid),
   public.reveal_all(uuid)
 to authenticated;

@@ -1,13 +1,14 @@
 // Security tests for ITO_PLAN §4.3 — nobody may learn another player's number before reveal.
 import { describe, expect, it } from 'vitest'
-import { admin, call, expectCode, myHand, newUser, playToRevealing, room, setupRoom, sleep, type Client } from './helpers'
+import { admin, call, dealAndPlace, expectCode, myHand, newUser, nextCard, room, setTheme, setupRoom, sleep, type Client } from './helpers'
 
 describe('RLS: secret numbers', () => {
   it("user B never sees user A's hand rows", async () => {
     const { users, roomId } = await setupRoom(3)
     const [a, b] = users
-    await call(a, 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 2, p_categories: ['general'] })
+    await call(a, 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 2 })
     await call(a, 'start_round', { p_room: roomId })
+    await setTheme(a, roomId)
     await call(a, 'confirm_theme', { p_room: roomId })
 
     const bHand = await myHand(b, roomId)
@@ -28,6 +29,7 @@ describe('RLS: secret numbers', () => {
   it('board_cards.revealed_value is null for everyone before reveal', async () => {
     const { users, roomId } = await setupRoom(2)
     await call(users[0], 'start_round', { p_room: roomId })
+    await setTheme(users[0], roomId)
     await call(users[0], 'confirm_theme', { p_room: roomId })
     const { data } = await users[1].from('board_cards').select('*').eq('room_id', roomId)
     expect(data).toHaveLength(2)
@@ -38,6 +40,7 @@ describe('RLS: secret numbers', () => {
   it('non-members see nothing of a room', async () => {
     const { users, roomId } = await setupRoom(2)
     await call(users[0], 'start_round', { p_room: roomId })
+    await setTheme(users[0], roomId)
     await call(users[0], 'confirm_theme', { p_room: roomId })
     const outsider = await newUser()
     for (const table of ['rooms', 'players', 'board_cards', 'hands']) {
@@ -50,6 +53,7 @@ describe('RLS: secret numbers', () => {
     const { users, roomId } = await setupRoom(2)
     const [a, b] = users
     await call(a, 'start_round', { p_room: roomId })
+    await setTheme(a, roomId)
     await call(a, 'confirm_theme', { p_room: roomId })
     const [card] = await myHand(b, roomId)
 
@@ -72,6 +76,7 @@ describe('RLS: secret numbers', () => {
     const { users, roomId } = await setupRoom(2)
     const [a, b] = users
     await call(a, 'start_round', { p_room: roomId })
+    await setTheme(a, roomId)
     await call(a, 'confirm_theme', { p_room: roomId })
     const [aCard] = await myHand(a, roomId)
     await expectCode(call(b, 'move_card', { p_card: aCard.card_id, p_position: 1 }), 'not_your_card')
@@ -115,6 +120,8 @@ describe('RLS: realtime payloads', () => {
     handsChannel.subscribe()
     await sleep(800)
 
+    await setTheme(a, roomId)
+
     await call(a, 'confirm_theme', { p_room: roomId })
     const [aCard] = await myHand(a, roomId)
     await call(a, 'move_card', { p_card: aCard.card_id, p_position: 1 })
@@ -145,11 +152,12 @@ describe('RLS: realtime payloads', () => {
     await new Promise<void>((resolve) => channel.subscribe((s) => s === 'SUBSCRIBED' && resolve()))
     await sleep(500)
 
-    await playToRevealing(users, roomId)
+    await dealAndPlace(users, roomId)
     await sleep(800)
     expect(seen.every((e) => e.revealed_value === null)).toBe(true)
 
-    await call(a, 'reveal_next', { p_room: roomId, p_expected: -1 })
+    const next = (await nextCard(users, roomId))!
+    await call(next.owner, 'flip_next', { p_room: roomId, p_card: next.card_id })
     await sleep(1000)
     const revealed = seen.filter((e) => e.revealed_value !== null)
     expect(revealed).toHaveLength(1)

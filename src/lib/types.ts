@@ -1,6 +1,6 @@
 import type { Theme } from '../data/themes'
 
-export type RoomStatus = 'lobby' | 'choosing_theme' | 'placing' | 'revealing' | 'result' | 'game_over'
+export type RoomStatus = 'lobby' | 'choosing_theme' | 'placing' | 'result' | 'game_over'
 export type GameMode = 'classic' | 'levelup'
 
 export type RoundResult = {
@@ -23,9 +23,8 @@ export type Room = {
   level: number
   lives: number
   round: number
-  theme_categories: string[]
   current_theme: Theme | null
-  theme_rerolls: number
+  theme_history: Theme[]
   reveal_index: number
   last_result: RoundResult | null
   roster_version: number
@@ -39,8 +38,6 @@ export type Player = {
   name: string
   color: string
   seat: number
-  locked: boolean
-  wants_reroll: boolean
   spectating: boolean
   left_at: string | null
 }

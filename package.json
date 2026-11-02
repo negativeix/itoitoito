@@ -8,7 +8,6 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc",
-    "gen:themes": "node --experimental-strip-types --no-warnings scripts/gen-themes-sql.mjs",
     "db:reset": "supabase db reset",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",

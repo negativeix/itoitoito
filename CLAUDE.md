@@ -36,7 +36,9 @@ Vite + React 18 + TypeScript + Tailwind CSS v4 + `motion` + @dnd-kit + Zustand +
 - **Never subscribe to `hands`** (not published). Putting an unpublished table in the same channel breaks the whole channel's postgres_changes.
 - **Host liveness** for migration uses the `heartbeats` table (RPC `heartbeat` every 10 s), not presence alone, so the server can verify "host gone > 20 s".
 - **Drag is custom pointer code** (not @dnd-kit) because one gesture must separate tap (clue), hold (peek) and drag. Keep the dragged card's DOM node mounted during a drag (iOS drops touch events for removed targets).
-- **Reveal driver:** host calls `reveal_next(expected_index)` every ~900 ms; if the host is offline the lowest-seat online player drives; everyone else is a slow fallback. Idempotent by design.
+- **Flip one card at a time (real-life flow, replaces the plan's lock → auto-reveal).** Once every card is on the table, the owner of the leftmost face-down card taps "เปิดการ์ดของฉัน" (`flip_next(room, card)`; host may flip for an offline owner; `reveal_all` is a host shortcut). Between flips everyone may keep moving their face-down cards, but only to the right of revealed ones (enforced in `move_card`). No lock / "มั่นใจแล้ว" step. Level Up ends the moment hearts hit 0; unflipped cards are shown in the result with `is_wrong = null`.
+- **Topics are custom-first.** Any player sets the topic (`set_theme`); `src/data/themes.ts` is only a client-side suggestion list (no themes table, no reroll votes, no category setting). Played topics are kept per room in `rooms.theme_history` for "วงนี้เคยเล่น".
+- Two players dropping at the same spot before seeing each other's move can get equal positions; ties break by card id identically on every client, and players can simply move again.
 - Zustand selectors must return stable references — derive arrays with `useMemo` outside the selector.
 - Small red/green text uses `--thread-ink` / `--success-ink` / `--danger-ink` (WCAG AA); brand `--thread` stays for large elements.
 

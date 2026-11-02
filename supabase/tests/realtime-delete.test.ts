@@ -2,12 +2,13 @@
 // Supabase Realtime does not deliver DELETE events to room-filtered subscriptions, so the server
 // bumps rooms.roster_version (a filterable UPDATE) and clients refetch the snapshot.
 import { expect, it } from 'vitest'
-import { call, setupRoom, sleep } from './helpers'
+import { call, setTheme, setupRoom, sleep } from './helpers'
 
 it('leaving bumps roster_version and the rooms UPDATE reaches the room', async () => {
   const { users, roomId } = await setupRoom(3)
   const [host, watcher, leaver] = users
   await call(host, 'start_round', { p_room: roomId })
+  await setTheme(host, roomId)
   await call(host, 'confirm_theme', { p_room: roomId })
 
   const versions: number[] = []

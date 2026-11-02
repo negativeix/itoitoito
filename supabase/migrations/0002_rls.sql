@@ -1,7 +1,6 @@
 -- Row Level Security (ITO_PLAN §4.3) — the most important file in the project.
 -- Clients may only SELECT. Every write goes through security-definer RPCs (0003_rpc.sql).
 
-alter table themes enable row level security;
 alter table rooms enable row level security;
 alter table players enable row level security;
 alter table hands enable row level security;
@@ -14,8 +13,6 @@ language sql stable security definer set search_path = public as $$
   select exists (select 1 from players p where p.room_id = p_room and p.user_id = auth.uid())
 $$;
 
-create policy themes_select_all on themes for select to anon, authenticated using (true);
-
 create policy rooms_select_member on rooms for select to authenticated using (public.is_room_member(id));
 create policy players_select_member on players for select to authenticated using (public.is_room_member(room_id));
 create policy board_select_member on board_cards for select to authenticated using (public.is_room_member(room_id));
@@ -26,7 +23,7 @@ create policy hands_select_owner on hands for select to authenticated using (own
 -- heartbeats: no policies at all (RPC access only).
 
 -- Defense in depth: no direct writes from client roles, whatever policies exist.
-revoke insert, update, delete, truncate on themes, rooms, players, hands, board_cards, heartbeats from anon, authenticated;
+revoke insert, update, delete, truncate on rooms, players, hands, board_cards, heartbeats from anon, authenticated;
 revoke select on rooms, players, hands, board_cards, heartbeats from anon;
 revoke select on heartbeats from authenticated;
 

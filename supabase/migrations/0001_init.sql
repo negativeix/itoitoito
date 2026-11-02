@@ -2,17 +2,8 @@
 
 create extension if not exists pgcrypto with schema extensions;
 
-create type room_status as enum ('lobby', 'choosing_theme', 'placing', 'revealing', 'result', 'game_over');
+create type room_status as enum ('lobby', 'choosing_theme', 'placing', 'result', 'game_over');
 create type game_mode as enum ('classic', 'levelup');
-
--- Theme library (seeded from src/data/themes.ts by scripts/gen-themes-sql.mjs).
-create table themes (
-  id text primary key,
-  category text not null,
-  title text not null,
-  low text not null,
-  high text not null
-);
 
 create table rooms (
   id uuid primary key default gen_random_uuid(),
@@ -24,12 +15,9 @@ create table rooms (
   level int not null default 1,
   lives int not null default 3,
   round int not null default 0,
-  theme_categories text[] not null default '{general}',
-  current_theme jsonb,                      -- snapshot {id, category, title, low, high}
-  used_theme_ids text[] not null default '{}',
-  theme_rerolls int not null default 0,
-  reveal_index int not null default -1,     -- reveal_order of the last revealed card
-  last_reveal_at timestamptz,
+  current_theme jsonb,                      -- {id, category, title, low, high, set_by}; set by players each round
+  theme_history jsonb not null default '[]', -- topics this room has played (newest first), for reuse
+  reveal_index int not null default -1,     -- reveal_order of the last revealed card (-1 = none yet)
   last_result jsonb,                        -- {wrong, total, perfect, lives_before, lives_after, level, deck_complete}
   -- Bumped whenever players/cards are deleted. Realtime cannot filter DELETE events by room,
   -- so clients watch this (filterable) rooms UPDATE and refetch instead.
@@ -45,10 +33,8 @@ create table players (
   name text not null check (char_length(name) between 1 and 16),
   color text not null,
   seat int not null,
-  locked boolean not null default false,
-  wants_reroll boolean not null default false,
   spectating boolean not null default false, -- joined mid-round; plays from the next round
-  left_at timestamptz,                       -- left during reveal/result; removed at the next round
+  left_at timestamptz,                       -- left after cards were revealed; removed at the next round
   joined_at timestamptz not null default now(),
   unique (room_id, user_id),
   unique (room_id, color)
@@ -74,7 +60,7 @@ create table board_cards (
   owner_player_id uuid not null references players(id) on delete cascade,
   position double precision,                -- null = still in hand; fractional index
   clue text check (char_length(clue) <= 24),
-  reveal_order int,                         -- fixed when the reveal starts
+  reveal_order int,                         -- set when this card is flipped (0, 1, 2, ...)
   revealed_value int,                       -- null until revealed by the server
   is_wrong boolean
 );

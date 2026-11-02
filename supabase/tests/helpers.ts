@@ -81,20 +81,47 @@ export async function placeAll(users: Client[], roomId: string, order: 'asc' | '
   return all
 }
 
-export async function playToRevealing(users: Client[], roomId: string, order: 'asc' | 'desc' = 'asc') {
-  await call(users[0], 'confirm_theme', { p_room: roomId })
-  const placed = await placeAll(users, roomId, order)
-  for (const c of users) await call(c, 'lock_in', { p_room: roomId, p_locked: true })
-  return placed
+export async function setTheme(c: Client, roomId: string, title = 'ความเผ็ดของอาหาร') {
+  await call(c, 'set_theme', { p_room: roomId, p_title: title, p_low: 'ไม่เผ็ด', p_high: 'เผ็ดมาก' })
 }
 
-export async function revealEverything(host: Client, roomId: string) {
+/** Sets a topic, deals, and places every card in value order. */
+export async function dealAndPlace(users: Client[], roomId: string, order: 'asc' | 'desc' = 'asc') {
+  await setTheme(users[0], roomId)
+  await call(users[0], 'confirm_theme', { p_room: roomId })
+  return placeAll(users, roomId, order)
+}
+
+/** The leftmost face-down card and the client that owns it. */
+export async function nextCard(users: Client[], roomId: string) {
+  const r = await room(roomId)
+  const { data } = await admin
+    .from('board_cards')
+    .select('card_id, owner_player_id, position')
+    .eq('room_id', roomId)
+    .eq('round', r.round)
+    .is('revealed_value', null)
+    .not('position', 'is', null)
+    .order('position')
+    .order('card_id')
+    .limit(1)
+  const card = data?.[0]
+  if (!card) return null
+  const ps = await players(roomId)
+  const owner = ps.find((p) => p.id === card.owner_player_id)!
+  return { card_id: card.card_id as string, owner: users.find((u) => u.uid === owner.user_id)! }
+}
+
+/** Each next card is flipped by its owner until the round ends. */
+export async function flipAll(users: Client[], roomId: string) {
   for (let guard = 0; guard < 200; guard++) {
     const r = await room(roomId)
-    if (r.status !== 'revealing') return r
-    await call(host, 'reveal_next', { p_room: roomId, p_expected: r.reveal_index })
+    if (r.status !== 'placing') return r
+    const next = await nextCard(users, roomId)
+    if (!next) return r
+    await call(next.owner, 'flip_next', { p_room: roomId, p_card: next.card_id })
   }
-  throw new Error('reveal did not finish')
+  throw new Error('flipping did not finish')
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))

@@ -7,7 +7,6 @@ import { QRFull, QRThumb } from '../components/QRSheet'
 import { Segmented } from '../components/Segmented'
 import { Sheet } from '../components/Sheet'
 import { StatusLine } from '../components/StatusLine'
-import { CATEGORIES, CATEGORY_LABELS } from '../data/themes'
 import { api } from '../lib/api'
 import { haptics } from '../lib/haptics'
 import { PLAYER_COLORS } from '../lib/players'
@@ -43,19 +42,10 @@ export function Lobby() {
     }
   }
 
-  const settings = (patch: Partial<{ mode: GameMode; cards: number; categories: string[] }>) => {
-    const next = { mode: room.mode, cards: room.cards_per_player, categories: room.theme_categories, ...patch }
-    useRoom.getState().patchRoom({ id: room.id, mode: next.mode, cards_per_player: next.cards, theme_categories: next.categories })
-    api.updateSettings(room.id, next.mode, next.cards, next.categories).catch(fail)
-  }
-
-  const toggleCategory = (c: string) => {
-    const has = room.theme_categories.includes(c)
-    if (has && room.theme_categories.length === 1) {
-      toast('ต้องเลือกอย่างน้อย 1 หมวด')
-      return
-    }
-    settings({ categories: has ? room.theme_categories.filter((x) => x !== c) : [...room.theme_categories, c] })
+  const settings = (patch: Partial<{ mode: GameMode; cards: number }>) => {
+    const next = { mode: room.mode, cards: room.cards_per_player, ...patch }
+    useRoom.getState().patchRoom({ id: room.id, mode: next.mode, cards_per_player: next.cards })
+    api.updateSettings(room.id, next.mode, next.cards).catch(fail)
   }
 
   const start = async () => {
@@ -145,28 +135,7 @@ export function Lobby() {
             />
           </div>
         )}
-        <div>
-          <p className="mb-1.5 text-sm font-bold text-ink-muted">หมวดหัวข้อ</p>
-          <div className="flex flex-wrap gap-2" role="group" aria-label="หมวดหัวข้อ">
-            {CATEGORIES.map((c) => {
-              const on = room.theme_categories.includes(c)
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  aria-pressed={on}
-                  disabled={!isHost}
-                  onClick={() => toggleCategory(c)}
-                  className={`min-h-12 rounded-full border-2 px-4 text-sm font-bold transition-colors disabled:cursor-default ${
-                    on ? 'border-thread-ink bg-thread-ink text-white' : 'border-line bg-surface text-ink-muted'
-                  }`}
-                >
-                  {CATEGORY_LABELS[c]}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+        <p className="text-sm text-ink-muted">หัวข้อแต่ละรอบ ทุกคนในวงช่วยกันคิดเองได้ หรือเลือกจากไอเดียที่แอปแนะนำ</p>
       </section>
 
       <BottomBar>

@@ -15,7 +15,6 @@ import { toast } from '../store/toastStore'
 import { Lobby } from './Lobby'
 import { Play } from './Play'
 import { Result } from './Result'
-import { Reveal } from './Reveal'
 import { Topic } from './Topic'
 
 type Gate = { kind: 'loading' } | { kind: 'join' } | { kind: 'in'; roomId: string } | { kind: 'error'; text: string }
@@ -158,6 +157,11 @@ function InRoom({ roomId, userId, onExit }: { roomId: string; userId: string; on
 
   const menu = (
     <div className="flex flex-col gap-3 pb-2">
+      {isHost && room.status === 'placing' && (
+        <PrimaryButton variant="secondary" onClick={() => api.revealAll(roomId).catch((e) => toast(e.message, 'error'))}>
+          เปิดการ์ดที่เหลือทั้งหมด
+        </PrimaryButton>
+      )}
       {isHost && room.status !== 'lobby' && (
         <PrimaryButton variant="secondary" onClick={() => api.backToLobby(roomId).catch((e) => toast(e.message, 'error'))}>
           กลับล็อบบี้ (จบเกมนี้)
@@ -179,9 +183,6 @@ function InRoom({ roomId, userId, onExit }: { roomId: string; userId: string; on
       break
     case 'placing':
       screen = <Play />
-      break
-    case 'revealing':
-      screen = <Reveal />
       break
     default:
       screen = <Result />

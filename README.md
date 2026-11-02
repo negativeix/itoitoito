@@ -28,7 +28,7 @@ To test on phones over Wi-Fi, set `VITE_SUPABASE_URL` to your computer's LAN IP 
 
 1. Create a project at supabase.com.
 2. **Authentication → Sign In / Providers → enable "Allow anonymous sign-ins".** The app does not work without this.
-3. Push the schema: `npx supabase link --project-ref <ref>` then `npx supabase db push`. This applies `supabase/migrations/*` (tables, RLS, RPCs, theme library, and the pg_cron cleanup job).
+3. Push the schema: `npx supabase link --project-ref <ref>` then `npx supabase db push`. This applies `supabase/migrations/*` (tables, RLS, RPCs, and the pg_cron cleanup job).
 4. Put the project URL and **anon/publishable** key in Vercel (or `.env.local`) as `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`. Never use the service-role key in the frontend.
 5. Realtime: the migration adds `rooms`, `players`, `board_cards` to the `supabase_realtime` publication. `hands` must never be added.
 
@@ -45,11 +45,10 @@ Import the repo; framework preset **Vite**, build `npm run build`, output `dist`
 | `npm run test:unit` | Rule/ordering/theme unit tests |
 | `npm run test:db` | RLS + game-flow tests against local Supabase (needs `supabase start`) |
 | `npx playwright test` | Browser E2E: 2–3 simulated phones play full games (needs dev server + local Supabase) |
-| `npm run gen:themes` | Regenerate `supabase/migrations/0004_themes.sql` from `src/data/themes.ts` |
 | `npm run db:reset` | Re-apply all migrations to the local database |
 
 E2E screenshots are written to `docs/screenshots/` (git-ignored).
 
-## Editing themes after the first deploy
+## Topic ideas
 
-`gen:themes` rewrites migration `0004`. Once that migration has been applied to production, copy the generated SQL into a **new** migration file instead (it upserts by id), so `db push` picks it up.
+Suggestions live in [src/data/themes.ts](src/data/themes.ts) (client-side only — edit and redeploy, no migration needed). Players can always type their own topic; topics a room has played are remembered in `rooms.theme_history`.

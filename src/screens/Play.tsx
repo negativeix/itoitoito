@@ -18,6 +18,7 @@ import { loadSnapshot, sendDrag } from '../lib/realtime'
 import { sound } from '../lib/sound'
 import { readLocal, writeLocal } from '../lib/storage'
 import type { BoardCard } from '../lib/types'
+import { useRevealFeedback } from '../lib/useRevealFeedback'
 import { activePlayers, effectiveBoard, myPlayer, tableOrder, useRoom } from '../store/roomStore'
 import { toast } from '../store/toastStore'
 
@@ -103,8 +104,10 @@ export function Play() {
       if (tz && g.y >= tz.top - 24 && g.y <= tz.bottom + 24) {
         const row = rowRef.current!.getBoundingClientRect()
         const others = order.filter((c) => c.card_id !== g.cardId)
+        const revealedCount = others.filter((c) => c.revealed_value != null).length
         zone = 'table'
-        index = insertionIndex(g.x - row.left, others.length, 'md', others.length + 1)
+        // Face-down cards always go to the right of the revealed ones.
+        index = Math.max(revealedCount, insertionIndex(g.x - row.left, others.length, 'md', others.length + 1))
       } else if (hz && g.y >= hz.top - 24) {
         zone = 'hand'
       }
@@ -225,36 +228,44 @@ export function Play() {
     fy.set(e.clientY)
   }
 
-  // ---------------------------------------------------------------- lock
+  // ---------------------------------------------------------------- flipping
 
-  const selfUnlock = useRef(false)
-  const prevLocked = useRef(me.locked)
-  useEffect(() => {
-    if (prevLocked.current && !me.locked && !selfUnlock.current) toast('มีคนขยับการ์ด กด "มั่นใจแล้ว" ใหม่อีกครั้งนะ')
-    selfUnlock.current = false
-    prevLocked.current = me.locked
-  }, [me.locked])
+  useRevealFeedback(board)
+  const online = useRoom((s) => s.online)
+  const [flipping, setFlipping] = useState(false)
+  const revealed = order.filter((c) => c.revealed_value != null)
+  const wrongSoFar = revealed.filter((c) => c.is_wrong).length
+  const allPlaced = board.every((c) => c.position != null)
+  const next = allPlaced ? (order.find((c) => c.revealed_value == null) ?? null) : null
+  const nextOwner = next ? players.find((p) => p.id === next.owner_player_id) : null
+  const myTurn = !!next && next.owner_player_id === me.id
+  const isHost = room.host_user_id === me.user_id
 
-  const setLocked = (locked: boolean) => {
+  const flip = async () => {
+    if (!next) return
+    setFlipping(true)
     haptics.tap()
-    if (!locked) selfUnlock.current = true
-    useRoom.getState().upsertPlayer({ ...me, locked })
-    api.lockIn(room.id, locked).catch((e) => {
-      useRoom.getState().upsertPlayer(me)
-      toast(e.message, 'error')
-    })
+    try {
+      await api.flipNext(room.id, next.card_id)
+    } catch (e) {
+      toast((e as Error).message, 'error')
+      void loadSnapshot(room.id)
+    } finally {
+      setFlipping(false)
+    }
   }
 
   // ---------------------------------------------------------------- status
 
   const active = activePlayers(players)
   const unplaced = active.filter((p) => board.some((c) => c.owner_player_id === p.id && c.position == null))
-  const unlocked = active.filter((p) => !p.locked)
   const allMinePlaced = myCards.length > 0 && handCards.length === 0
+  const who = (id: string, name: string) => (id === me.id ? 'คุณ' : name)
   let status: string
   if (me.spectating) status = 'คุณเข้ามากลางรอบ รอเล่นรอบถัดไปนะ'
-  else if (unplaced.length) status = `รอ ${nameList(unplaced.map((p) => (p.id === me.id ? 'คุณ' : p.name)))} วางการ์ด (${active.length - unplaced.length}/${active.length})`
-  else status = `รอ ${nameList(unlocked.map((p) => (p.id === me.id ? 'คุณ' : p.name)))} กดมั่นใจแล้ว (${active.length - unlocked.length}/${active.length})`
+  else if (unplaced.length) status = `รอ ${nameList(unplaced.map((p) => who(p.id, p.name)))} วางการ์ด (${active.length - unplaced.length}/${active.length})`
+  else if (myTurn) status = revealed.length ? 'ถึงตาคุณ! คุยกันให้พร้อมแล้วเปิดการ์ดใบถัดไป' : 'ทุกคนวางครบแล้ว ถึงตาคุณเปิดใบแรก!'
+  else status = `รอ ${nextOwner?.name ?? 'เพื่อน'} เปิดใบถัดไป · ระหว่างนี้ขยับการ์ดตัวเองได้`
 
   const draggedCard = drag ? board.find((c) => c.card_id === drag.cardId) : null
   const handWidth = handCards.length >= 3 ? 'w-[27vw] max-w-28' : 'w-32'
@@ -264,12 +275,15 @@ export function Play() {
       <div className="sticky top-0 z-20 -mx-4 bg-bg/95 px-4 pb-2 backdrop-blur-sm">
         <TopicBar theme={room.current_theme} />
       </div>
-      {room.mode === 'levelup' && (
-        <div className="flex justify-center">
-          <Hearts lives={room.lives} level={room.level} />
-        </div>
-      )}
-      <StatusLine tone={me.locked ? 'thread' : 'muted'}>{status}</StatusLine>
+      <div className="flex items-center justify-center gap-4">
+        {room.mode === 'levelup' && <Hearts lives={Math.max(0, room.lives - wrongSoFar)} level={room.level} />}
+        {revealed.length > 0 && (
+          <span className="num text-sm font-bold text-ink-muted" aria-live="polite">
+            เปิดแล้ว {revealed.length}/{board.length}
+          </span>
+        )}
+      </div>
+      <StatusLine tone={myTurn ? 'thread' : wrongSoFar ? 'danger' : 'muted'}>{status}</StatusLine>
       <div className="mt-2">
         <RuleChips />
       </div>
@@ -287,6 +301,7 @@ export function Play() {
           dragId={drag?.origin === 'table' ? drag.cardId : drag ? null : undefined}
           insertIndex={drag ? insertAt : null}
           ghosts={ghosts}
+          nextId={next?.card_id ?? null}
           onMyCardPointerDown={me.spectating ? undefined : (e, id) => onCardDown(e, id, 'table')}
         />
       </section>
@@ -348,13 +363,18 @@ export function Play() {
       <BottomBar>
         {me.spectating ? null : !allMinePlaced ? (
           <PrimaryButton disabled>วางการ์ดให้ครบก่อน</PrimaryButton>
-        ) : me.locked ? (
-          <PrimaryButton variant="secondary" onClick={() => setLocked(false)}>
-            รอเพื่อน… (แตะเพื่อยกเลิก)
+        ) : !next ? (
+          <PrimaryButton disabled>รอเพื่อนวางการ์ดให้ครบ</PrimaryButton>
+        ) : myTurn ? (
+          <PrimaryButton onClick={flip} disabled={flipping}>
+            {flipping ? 'กำลังเปิด…' : 'เปิดการ์ดของฉัน'}
           </PrimaryButton>
-        ) : (
-          <PrimaryButton onClick={() => setLocked(true)}>มั่นใจแล้ว</PrimaryButton>
-        )}
+        ) : isHost && nextOwner && !online.includes(nextOwner.user_id) ? (
+          // The owner dropped offline: the host can flip for them.
+          <PrimaryButton variant="secondary" onClick={flip} disabled={flipping}>
+            เปิดแทน {nextOwner.name} (ออฟไลน์)
+          </PrimaryButton>
+        ) : null}
       </BottomBar>
 
       {drag &&

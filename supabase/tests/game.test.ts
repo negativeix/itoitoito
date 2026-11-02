@@ -4,14 +4,16 @@ import { judge } from '../../src/lib/judge'
 import {
   admin,
   call,
+  dealAndPlace,
   expectCode,
+  flipAll,
   myHand,
   newUser,
+  nextCard,
   placeAll,
   players,
-  playToRevealing,
-  revealEverything,
   room,
+  setTheme,
   setupRoom,
 } from './helpers'
 
@@ -62,13 +64,10 @@ describe('rooms & lobby', () => {
 
   it('settings: host only, lobby only, validated', async () => {
     const { roomId, users } = await setupRoom(2)
-    await expectCode(call(users[1], 'update_settings', { p_room: roomId, p_mode: 'levelup', p_cards: 1, p_categories: ['general'] }), 'not_host')
-    await expectCode(call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 4, p_categories: ['general'] }), 'invalid_settings')
-    await expectCode(call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 1, p_categories: ['nope'] }), 'invalid_settings')
-    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 3, p_categories: ['friends', 'family'] })
-    const r = await room(roomId)
-    expect(r.cards_per_player).toBe(3)
-    expect(r.theme_categories).toEqual(['family', 'friends'])
+    await expectCode(call(users[1], 'update_settings', { p_room: roomId, p_mode: 'levelup', p_cards: 1 }), 'not_host')
+    await expectCode(call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 4 }), 'invalid_settings')
+    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 3 })
+    expect((await room(roomId)).cards_per_player).toBe(3)
   })
 
   it('cannot start alone', async () => {
@@ -78,99 +77,147 @@ describe('rooms & lobby', () => {
   })
 })
 
-describe('classic round', () => {
-  it('deals unique numbers, judges a perfect row as a win', async () => {
-    const { users, roomId } = await setupRoom(4)
-    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 3, p_categories: ['general'] })
+describe('topic (custom first)', () => {
+  it('any player can set the topic; host cannot deal without one', async () => {
+    const { users, roomId } = await setupRoom(3)
     await call(users[0], 'start_round', { p_room: roomId })
-    const r1 = await room(roomId)
-    expect(r1.status).toBe('choosing_theme')
-    expect(r1.current_theme.category).toBe('general')
+    expect((await room(roomId)).current_theme).toBeNull()
+    await expectCode(call(users[0], 'confirm_theme', { p_room: roomId }), 'no_theme')
 
-    await playToRevealing(users, roomId, 'asc')
+    await expectCode(call(users[2], 'set_theme', { p_room: roomId, p_title: 'x', p_low: '', p_high: 'b' }), 'invalid_theme')
+    await call(users[2], 'set_theme', { p_room: roomId, p_title: '  ความเมาของเพื่อนแต่ละคน ', p_low: 'สร่าง', p_high: 'คลานกลับบ้าน' })
+    expect((await room(roomId)).current_theme).toMatchObject({ category: 'custom', title: 'ความเมาของเพื่อนแต่ละคน', set_by: 'ผู้เล่น2' })
+
+    await call(users[1], 'set_theme', { p_room: roomId, p_title: 'ความหวานของขนม', p_low: 'จืด', p_high: 'หวานเจี๊ยบ', p_source_id: 'general-15' })
+    expect((await room(roomId)).current_theme).toMatchObject({ id: 'general-15', category: 'suggested', set_by: 'ผู้เล่น1' })
+    await expectCode(call(users[1], 'confirm_theme', { p_room: roomId }), 'not_host')
+  })
+
+  it('remembers played topics per room, newest first, without duplicates', async () => {
+    const { users, roomId } = await setupRoom(2)
+    await call(users[0], 'start_round', { p_room: roomId })
+    for (const title of ['หัวข้อ A', 'หัวข้อ B', 'หัวข้อ A']) {
+      await setTheme(users[0], roomId, title)
+      await call(users[0], 'confirm_theme', { p_room: roomId })
+      await call(users[0], 'reveal_all', { p_room: roomId }).catch(() => {}) // cards not placed: fine
+      await call(users[0], 'back_to_lobby', { p_room: roomId })
+      await call(users[0], 'start_round', { p_room: roomId })
+    }
+    const history = (await room(roomId)).theme_history as { title: string; set_by?: string }[]
+    expect(history.map((h) => h.title)).toEqual(['หัวข้อ A', 'หัวข้อ B'])
+    expect(history[0]).not.toHaveProperty('set_by')
+  })
+})
+
+describe('flip one card at a time', () => {
+  it('deals unique numbers; owners flip in table order; a perfect row wins', async () => {
+    const { users, roomId } = await setupRoom(4)
+    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 3 })
+    await call(users[0], 'start_round', { p_room: roomId })
+    await dealAndPlace(users, roomId, 'asc')
     const { data: hands } = await admin.from('hands').select('value').eq('room_id', roomId)
     expect(hands).toHaveLength(12)
     expect(new Set(hands!.map((h) => h.value)).size).toBe(12)
 
-    const done = await revealEverything(users[0], roomId)
+    const done = await flipAll(users, roomId)
     expect(done.status).toBe('result')
     expect(done.last_result).toMatchObject({ wrong: 0, total: 12, perfect: true })
   })
 
-  it('wrong flags match the judge() rule for a reversed row', async () => {
+  it('only the next card can be flipped, only by its owner (or the host), only when all cards are placed', async () => {
     const { users, roomId } = await setupRoom(3)
-    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 2, p_categories: ['general'] })
     await call(users[0], 'start_round', { p_room: roomId })
-    await playToRevealing(users, roomId, 'desc')
-    await revealEverything(users[0], roomId)
+    await setTheme(users[0], roomId)
+    await call(users[0], 'confirm_theme', { p_room: roomId })
+    const [h1] = await myHand(users[1], roomId)
+    await call(users[1], 'move_card', { p_card: h1.card_id, p_position: 1 })
+    await expectCode(call(users[1], 'flip_next', { p_room: roomId, p_card: h1.card_id }), 'cards_not_placed')
 
+    await placeAll(users, roomId, 'asc')
+    const next = (await nextCard(users, roomId))!
+    const stranger = users.find((u) => u !== next.owner && u !== users[0])
+    if (stranger) await expectCode(call(stranger, 'flip_next', { p_room: roomId, p_card: next.card_id }), 'not_your_turn')
+
+    // Not the leftmost card → refused.
+    const { data: board } = await admin.from('board_cards').select('card_id').eq('room_id', roomId).order('position', { ascending: false }).limit(1)
+    await expectCode(call(users[0], 'flip_next', { p_room: roomId, p_card: board![0].card_id }), 'order_changed')
+
+    // The host may flip for someone else.
+    await call(users[0], 'flip_next', { p_room: roomId, p_card: next.card_id })
+    expect((await room(roomId)).reveal_index).toBe(0)
+    // Double tap: no-op.
+    await call(users[0], 'flip_next', { p_room: roomId, p_card: next.card_id })
+    expect((await room(roomId)).reveal_index).toBe(0)
+  })
+
+  it('players rearrange face-down cards between flips, but only right of revealed cards', async () => {
+    const { users, roomId } = await setupRoom(3)
+    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 2 })
+    await call(users[0], 'start_round', { p_room: roomId })
+    const placed = await dealAndPlace(users, roomId, 'desc') // positions 1..6, highest value first
+
+    // Flip the first (highest) card.
+    const first = (await nextCard(users, roomId))!
+    await call(first.owner, 'flip_next', { p_room: roomId, p_card: first.card_id })
+    const { data: flipped } = await admin.from('board_cards').select('*').eq('card_id', first.card_id).single()
+    expect(flipped!.revealed_value).toBe(placed[0].value)
+    expect(flipped!.is_wrong).toBe(false)
+
+    // Revealed cards are fixed; face-down ones can't go left of them.
+    await expectCode(call(first.owner, 'move_card', { p_card: first.card_id, p_position: 99 }), 'card_revealed')
+    const lowest = placed[placed.length - 1]
+    await expectCode(call(lowest.c, 'move_card', { p_card: lowest.card_id, p_position: 0.5 }), 'invalid_position')
+
+    // With the new information everyone re-sorts the rest ascending (right of position 1).
+    const rest = placed.slice(1).sort((a, b) => a.value - b.value)
+    for (let i = 0; i < rest.length; i++) await call(rest[i].c, 'move_card', { p_card: rest[i].card_id, p_position: 2 + i })
+
+    const done = await flipAll(users, roomId)
+    // Only the cards lower than the first revealed card count as wrong: all 5 here.
+    const { data: board } = await admin.from('board_cards').select('*').eq('room_id', roomId).order('reveal_order')
+    expect(board!.map((c) => c.is_wrong)).toEqual(judge(board!.map((c) => c.revealed_value)).wrong)
+    expect(done.last_result.wrong).toBe(5)
+  })
+
+  it('a stale "next card" is refused with order_changed after someone moves in front', async () => {
+    const { users, roomId } = await setupRoom(2)
+    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 2 })
+    await call(users[0], 'start_round', { p_room: roomId })
+    await dealAndPlace(users, roomId)
+    const seen = (await nextCard(users, roomId))!
+    const other = users.find((u) => u !== seen.owner)!
+    const [otherCard] = await myHand(other, roomId)
+    await call(other, 'move_card', { p_card: otherCard.card_id, p_position: -5 })
+    if (otherCard.card_id !== seen.card_id) {
+      await expectCode(call(seen.owner, 'flip_next', { p_room: roomId, p_card: seen.card_id }), 'order_changed')
+    }
+  })
+
+  it('wrong flags match judge() for a reversed row', async () => {
+    const { users, roomId } = await setupRoom(3)
+    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 2 })
+    await call(users[0], 'start_round', { p_room: roomId })
+    await dealAndPlace(users, roomId, 'desc')
+    await flipAll(users, roomId)
     const { data: board } = await admin.from('board_cards').select('*').eq('room_id', roomId).order('reveal_order')
     const values = board!.map((c) => c.revealed_value as number)
     expect(board!.map((c) => c.is_wrong)).toEqual(judge(values).wrong)
     expect((await room(roomId)).last_result.wrong).toBe(5)
   })
 
-  it('lock requires every card placed; any move resets all locks', async () => {
-    const { users, roomId } = await setupRoom(3)
-    await call(users[0], 'start_round', { p_room: roomId })
-    await call(users[0], 'confirm_theme', { p_room: roomId })
-    await expectCode(call(users[1], 'lock_in', { p_room: roomId, p_locked: true }), 'cards_not_placed')
-
-    const placed = await placeAll(users, roomId)
-    await call(users[0], 'lock_in', { p_room: roomId, p_locked: true })
-    await call(users[1], 'lock_in', { p_room: roomId, p_locked: true })
-    expect((await players(roomId)).filter((p) => p.locked)).toHaveLength(2)
-
-    const third = placed.find((p) => p.c === users[2])!
-    await call(users[2], 'move_card', { p_card: third.card_id, p_position: 0.5 })
-    expect((await players(roomId)).filter((p) => p.locked)).toHaveLength(0)
-    expect((await room(roomId)).status).toBe('placing')
-
-    for (const c of users) await call(c, 'lock_in', { p_room: roomId, p_locked: true })
-    expect((await room(roomId)).status).toBe('revealing')
-    await expectCode(call(users[2], 'move_card', { p_card: third.card_id, p_position: 9 }), 'wrong_phase')
-  })
-
-  it('reveal_next is idempotent under duplicate and concurrent calls', async () => {
-    const { users, roomId } = await setupRoom(3)
-    await call(users[0], 'start_round', { p_room: roomId })
-    await playToRevealing(users, roomId)
-    const results = await Promise.all([
-      call<number>(users[0], 'reveal_next', { p_room: roomId, p_expected: -1 }),
-      call<number>(users[0], 'reveal_next', { p_room: roomId, p_expected: -1 }),
-      call<number>(users[0], 'reveal_next', { p_room: roomId, p_expected: -1 }),
-    ])
-    expect((await room(roomId)).reveal_index).toBe(0)
-    expect(results.filter((r) => r === 0)).toHaveLength(3)
-    // Stale expected index: no-op.
-    await call(users[0], 'reveal_next', { p_room: roomId, p_expected: -1 })
-    expect((await room(roomId)).reveal_index).toBe(0)
-  })
-
-  it('a non-host can continue the reveal (host dropped) but is paced', async () => {
-    const { users, roomId } = await setupRoom(3)
-    await call(users[0], 'start_round', { p_room: roomId })
-    await playToRevealing(users, roomId)
-    await admin.from('rooms').update({ last_reveal_at: new Date(Date.now() - 5000).toISOString() }).eq('id', roomId)
-    expect(await call<number>(users[1], 'reveal_next', { p_room: roomId, p_expected: -1 })).toBe(0)
-    // Immediately again: within 600 ms, so the pace guard holds it.
-    expect(await call<number>(users[1], 'reveal_next', { p_room: roomId, p_expected: 0 })).toBe(0)
-  })
-
   it('reveal_all finishes the round at once (host only)', async () => {
     const { users, roomId } = await setupRoom(3)
     await call(users[0], 'start_round', { p_room: roomId })
-    await playToRevealing(users, roomId)
+    await dealAndPlace(users, roomId)
+    await expectCode(call(users[1], 'reveal_all', { p_room: roomId }), 'not_host')
     await call(users[0], 'reveal_all', { p_room: roomId })
-    const r = await room(roomId)
-    expect(r.status).toBe('result')
-    const { data } = await admin.from('board_cards').select('revealed_value').eq('room_id', roomId)
-    expect(data!.every((c) => c.revealed_value !== null)).toBe(true)
+    expect((await room(roomId)).status).toBe('result')
   })
 
   it('clues are trimmed and capped at 24 characters', async () => {
     const { users, roomId } = await setupRoom(2)
     await call(users[0], 'start_round', { p_room: roomId })
+    await setTheme(users[0], roomId)
     await call(users[0], 'confirm_theme', { p_room: roomId })
     const [card] = await myHand(users[1], roomId)
     await call(users[1], 'set_clue', { p_card: card.card_id, p_clue: '  ข้าว   มันไก่  ' })
@@ -179,82 +226,43 @@ describe('classic round', () => {
     await expectCode(call(users[1], 'set_clue', { p_card: card.card_id, p_clue: 'ก'.repeat(25) }), 'clue_too_long')
   })
 
-  it('next round clears old cards and picks a different theme', async () => {
+  it('next round clears old cards and asks for a new topic', async () => {
     const { users, roomId } = await setupRoom(2)
     await call(users[0], 'start_round', { p_room: roomId })
-    const t1 = (await room(roomId)).current_theme.id
-    await playToRevealing(users, roomId)
-    await revealEverything(users[0], roomId)
+    await dealAndPlace(users, roomId)
+    await flipAll(users, roomId)
     await call(users[0], 'next_round', { p_room: roomId })
     const r = await room(roomId)
-    expect(r.status).toBe('choosing_theme')
-    expect(r.round).toBe(2)
-    expect(r.current_theme.id).not.toBe(t1)
+    expect([r.status, r.round, r.current_theme, r.reveal_index]).toEqual(['choosing_theme', 2, null, -1])
     const { count } = await admin.from('hands').select('*', { count: 'exact', head: true }).eq('room_id', roomId)
     expect(count).toBe(0)
-  })
-
-  it('back to lobby resets the game', async () => {
-    const { users, roomId } = await setupRoom(2)
-    await call(users[0], 'start_round', { p_room: roomId })
-    await playToRevealing(users, roomId)
-    await call(users[0], 'back_to_lobby', { p_room: roomId })
-    const r = await room(roomId)
-    expect(r.status).toBe('lobby')
-    expect(r.current_theme).toBeNull()
-  })
-})
-
-describe('topic votes', () => {
-  it('rerolls on a majority, at most twice per round; custom theme works', async () => {
-    const { users, roomId } = await setupRoom(4)
-    await call(users[0], 'start_round', { p_room: roomId })
-    const t0 = (await room(roomId)).current_theme.id
-
-    await call(users[1], 'vote_reroll', { p_room: roomId })
-    await call(users[2], 'vote_reroll', { p_room: roomId })
-    expect((await room(roomId)).current_theme.id).toBe(t0) // 2/4 is not more than half
-    await call(users[2], 'vote_reroll', { p_room: roomId }) // toggle off
-    await call(users[2], 'vote_reroll', { p_room: roomId })
-    await call(users[3], 'vote_reroll', { p_room: roomId })
-    const r1 = await room(roomId)
-    expect(r1.current_theme.id).not.toBe(t0)
-    expect(r1.theme_rerolls).toBe(1)
-    expect((await players(roomId)).every((p) => !p.wants_reroll)).toBe(true)
-
-    for (const c of users.slice(1)) await call(c, 'vote_reroll', { p_room: roomId })
-    expect((await room(roomId)).theme_rerolls).toBe(2)
-    await expectCode(call(users[1], 'vote_reroll', { p_room: roomId }), 'no_rerolls_left')
-
-    await expectCode(call(users[1], 'set_custom_theme', { p_room: roomId, p_title: 'x', p_low: 'a', p_high: 'b' }), 'not_host')
-    await expectCode(call(users[0], 'set_custom_theme', { p_room: roomId, p_title: 'x', p_low: '', p_high: 'b' }), 'invalid_theme')
-    await call(users[0], 'set_custom_theme', { p_room: roomId, p_title: 'ความง่วงตอนบ่าย', p_low: 'ตาสว่าง', p_high: 'หลับคาโต๊ะ' })
-    expect((await room(roomId)).current_theme).toMatchObject({ category: 'custom', title: 'ความง่วงตอนบ่าย' })
   })
 })
 
 describe('level up mode', () => {
-  it('loses a heart per wrong card, gains one on a perfect level, ends at zero', async () => {
+  it('loses a heart per wrong card and ends the moment hearts run out', async () => {
     const { users, roomId } = await setupRoom(3)
-    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'levelup', p_cards: 1, p_categories: ['general'] })
+    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'levelup', p_cards: 1 })
     await call(users[0], 'start_round', { p_room: roomId })
 
-    // Level 1, perfect: hearts stay capped at 3.
-    await playToRevealing(users, roomId, 'asc')
-    let r = await revealEverything(users[0], roomId)
+    // Level 1 perfect: hearts stay capped at 3.
+    await dealAndPlace(users, roomId, 'asc')
+    let r = await flipAll(users, roomId)
     expect(r.last_result).toMatchObject({ wrong: 0, lives_before: 3, lives_after: 3, level: 1 })
 
-    // Level 2: 2 cards each, reversed → 5 wrong → game over.
+    // Level 2: 6 cards placed descending → the 3rd wrong card (4th flip) ends the game early.
     await call(users[0], 'next_round', { p_room: roomId })
     expect((await room(roomId)).level).toBe(2)
-    await playToRevealing(users, roomId, 'desc')
-    expect(await myHand(users[1], roomId)).toHaveLength(2)
-    r = await revealEverything(users[0], roomId)
+    await dealAndPlace(users, roomId, 'desc')
+    r = await flipAll(users, roomId)
     expect(r.status).toBe('game_over')
-    expect(r.lives).toBe(0)
-    expect(r.last_result).toMatchObject({ wrong: 5, level: 2, lives_after: 0 })
+    expect(r.reveal_index).toBe(3)
+    expect(r.last_result).toMatchObject({ wrong: 3, total: 6, lives_after: 0, level: 2 })
+    // The cards nobody flipped are shown in the result but not judged.
+    const { data: board } = await admin.from('board_cards').select('*').eq('room_id', roomId)
+    expect(board!.every((c) => c.revealed_value !== null)).toBe(true)
+    expect(board!.filter((c) => c.is_wrong === null)).toHaveLength(2)
 
-    // Play again from game over restarts at level 1 with 3 hearts.
     await call(users[0], 'start_round', { p_room: roomId })
     r = await room(roomId)
     expect([r.level, r.lives, r.round]).toEqual([1, 3, 1])
@@ -262,20 +270,20 @@ describe('level up mode', () => {
 
   it('a perfect level after losing hearts gives one back', async () => {
     const { users, roomId } = await setupRoom(2)
-    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'levelup', p_cards: 1, p_categories: ['general'] })
+    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'levelup', p_cards: 1 })
     await call(users[0], 'start_round', { p_room: roomId })
     await admin.from('rooms').update({ lives: 1 }).eq('id', roomId)
-    await playToRevealing(users, roomId, 'asc')
-    const r = await revealEverything(users[0], roomId)
+    await dealAndPlace(users, roomId, 'asc')
+    const r = await flipAll(users, roomId)
     expect(r.last_result).toMatchObject({ lives_before: 1, lives_after: 2 })
   })
 
   it('ends with a deck-complete win when the next level needs more than 100 cards', async () => {
     const { users, roomId } = await setupRoom(2)
-    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'levelup', p_cards: 1, p_categories: ['general'] })
+    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'levelup', p_cards: 1 })
     await call(users[0], 'start_round', { p_room: roomId })
-    await playToRevealing(users, roomId)
-    await revealEverything(users[0], roomId)
+    await dealAndPlace(users, roomId)
+    await flipAll(users, roomId)
     await admin.from('rooms').update({ level: 50 }).eq('id', roomId) // 2 × 51 > 100
     await call(users[0], 'next_round', { p_room: roomId })
     const r = await room(roomId)
@@ -285,51 +293,51 @@ describe('level up mode', () => {
 })
 
 describe('edge cases (§8)', () => {
-  it('leaving during placing removes the cards and can trigger the reveal', async () => {
+  it('leaving before any flip removes the player and their cards', async () => {
     const { users, roomId } = await setupRoom(3)
     await call(users[0], 'start_round', { p_room: roomId })
-    await call(users[0], 'confirm_theme', { p_room: roomId })
-    // Place first, then lock: any move resets everyone's lock.
-    for (const c of users.slice(0, 2)) {
-      const [h] = await myHand(c, roomId)
-      await call(c, 'move_card', { p_card: h.card_id, p_position: Math.random() })
-    }
-    for (const c of users.slice(0, 2)) await call(c, 'lock_in', { p_room: roomId, p_locked: true })
+    await dealAndPlace(users, roomId)
     await call(users[2], 'leave_room', { p_room: roomId })
     const { count } = await admin.from('board_cards').select('*', { count: 'exact', head: true }).eq('room_id', roomId)
     expect(count).toBe(2)
-    expect((await room(roomId)).status).toBe('revealing')
+    expect(await players(roomId)).toHaveLength(2)
+    expect((await room(roomId)).roster_version).toBe(1)
   })
 
-  it('leaving during reveal keeps the cards; the player is cleaned up next round', async () => {
-    const { users, roomId } = await setupRoom(3)
+  it('leaving after flips keeps revealed cards, drops face-down ones, and can end the round', async () => {
+    const { users, roomId } = await setupRoom(2)
+    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 2 })
     await call(users[0], 'start_round', { p_room: roomId })
-    await playToRevealing(users, roomId)
-    await call(users[2], 'leave_room', { p_room: roomId })
-    const { count } = await admin.from('board_cards').select('*', { count: 'exact', head: true }).eq('room_id', roomId)
-    expect(count).toBe(3)
-    await revealEverything(users[0], roomId)
-    await call(users[0], 'next_round', { p_room: roomId })
-    expect(await players(roomId)).toHaveLength(2)
+    const placed = await dealAndPlace(users, roomId)
+    // Flip everything except the leaver's last face-down card(s).
+    const leaver = placed[placed.length - 1].c
+    for (;;) {
+      const next = (await nextCard(users, roomId))!
+      if (next.owner === leaver && placed.filter((p) => p.c === leaver).length > 0) {
+        const left = await admin.from('board_cards').select('card_id').eq('room_id', roomId).is('revealed_value', null)
+        if (left.data!.every((c) => placed.find((p) => p.card_id === c.card_id)!.c === leaver)) break
+      }
+      await call(next.owner, 'flip_next', { p_room: roomId, p_card: next.card_id })
+    }
+    await call(leaver, 'leave_room', { p_room: roomId })
+    const r = await room(roomId)
+    expect(r.status).toBe('result')
+    // Marked as left if they had revealed cards (those stay on the table), otherwise removed.
+    const row = (await players(roomId)).find((p) => p.user_id === leaver.uid)
+    expect(row === undefined || row.left_at !== null).toBe(true)
   })
 
   it('joining mid-round spectates until the next round', async () => {
     const { users, roomId, code } = await setupRoom(2)
     await call(users[0], 'start_round', { p_room: roomId })
-    await call(users[0], 'confirm_theme', { p_room: roomId })
+    await dealAndPlace(users, roomId)
     const late = await newUser()
     await call(late, 'join_room', { p_code: code, p_name: 'มาสาย' })
     expect((await players(roomId))[2].spectating).toBe(true)
     expect(await myHand(late, roomId)).toHaveLength(0)
-    // Spectators can watch the face-down table.
     const { data } = await late.from('board_cards').select('*').eq('room_id', roomId)
     expect(data).toHaveLength(2)
-    await expectCode(call(late, 'lock_in', { p_room: roomId, p_locked: true }), 'spectating')
-
-    await placeAll(users, roomId)
-    for (const c of users) await call(c, 'lock_in', { p_room: roomId, p_locked: true })
-    expect((await room(roomId)).status).toBe('revealing') // the spectator does not block
-    await revealEverything(users[0], roomId)
+    await flipAll(users, roomId)
     await call(users[0], 'next_round', { p_room: roomId })
     expect((await players(roomId))[2].spectating).toBe(false)
   })
@@ -347,9 +355,7 @@ describe('edge cases (§8)', () => {
     await call(users[1], 'heartbeat', { p_room: roomId })
     await call(users[2], 'heartbeat', { p_room: roomId })
     await expectCode(call(users[2], 'transfer_host', { p_room: roomId }), 'host_still_here')
-
     await admin.from('heartbeats').update({ seen_at: new Date(Date.now() - 30_000).toISOString() }).eq('user_id', users[0].uid)
-    // Seat 2 calls, but the lowest online seat (1) becomes host.
     await call(users[2], 'transfer_host', { p_room: roomId })
     expect((await room(roomId)).host_user_id).toBe(users[1].uid)
   })

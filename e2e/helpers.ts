@@ -81,7 +81,34 @@ export async function dragToTable(page: Page, where: 'end' | 'start' = 'end', n 
   await page.mouse.up()
 }
 
-export async function lockIn(page: Page) {
-  await page.getByRole('button', { name: 'มั่นใจแล้ว' }).click()
-  await expect(page.getByRole('button', { name: /รอเพื่อน/ })).toBeVisible()
+/** Anyone sets their own topic through the form. */
+export async function setCustomTopic(page: Page, title: string, low: string, high: string) {
+  await page.getByRole('button', { name: 'ตั้งหัวข้อเอง' }).click()
+  await page.getByPlaceholder('เช่น ความเมาของเพื่อนแต่ละคน').fill(title)
+  await page.getByPlaceholder('สร่างเป๊ะ').fill(low)
+  await page.getByPlaceholder('คลานกลับบ้าน').fill(high)
+  await page.getByRole('button', { name: 'ใช้หัวข้อนี้' }).click()
+}
+
+const RESULT = /ร้อยด้ายสำเร็จ!|ด้ายขาด \d+ จุด|Game Over|ร้อยด้ายครบทั้งสำรับ!/
+
+/** Flip phase: whoever sees "เปิดการ์ดของฉัน" taps it, until the round is over. Returns flips made. */
+export async function flipAll(phones: Page[]) {
+  let flips = 0
+  for (let guard = 0; guard < 60; guard++) {
+    if (await phones[0].getByRole('heading', { name: RESULT }).isVisible()) return flips
+    let clicked = false
+    for (const p of phones) {
+      const b = p.getByRole('button', { name: 'เปิดการ์ดของฉัน' })
+      if (await b.isVisible()) {
+        await b.click()
+        flips++
+        clicked = true
+        await expect(phones[0].getByText(new RegExp(`เปิดแล้ว ${flips}/`)).or(phones[0].getByRole('heading', { name: RESULT }))).toBeVisible()
+        break
+      }
+    }
+    if (!clicked) await phones[0].waitForTimeout(250)
+  }
+  throw new Error('flip phase did not finish')
 }

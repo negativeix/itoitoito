@@ -36,7 +36,7 @@ type Props = {
   players: Player[]
   myPlayerId: string | null
   size?: TableSize
-  mode: 'placing' | 'reveal' | 'result'
+  mode: 'placing' | 'result'
   /** My secret values, for press-and-hold peeks on my own table cards. */
   myValues?: Record<string, number>
   peekId?: string | null
@@ -44,12 +44,14 @@ type Props = {
   dragId?: string | null
   insertIndex?: number | null
   ghosts?: Record<string, Ghost>
+  /** The leftmost face-down card (flipped next). */
+  nextId?: string | null
   win?: boolean
   onMyCardPointerDown?: (e: ReactPointerEvent, cardId: string) => void
 }
 
 export const Table = forwardRef<HTMLDivElement, Props>(function Table(
-  { cards, players, myPlayerId, size = 'md', mode, myValues = {}, peekId, dragId, insertIndex, ghosts = {}, win = false, onMyCardPointerDown },
+  { cards, players, myPlayerId, size = 'md', mode, myValues = {}, peekId, dragId, insertIndex, ghosts = {}, nextId = null, win = false, onMyCardPointerDown },
   rowRef,
 ) {
   const reduce = useReducedMotion()
@@ -95,7 +97,7 @@ export const Table = forwardRef<HTMLDivElement, Props>(function Table(
       <div ref={rowRef} className="relative" style={{ width: Math.max(rowWidth, 0), minWidth: '100%', paddingTop: m.topPad, paddingBottom: 40 }}>
         <svg className="pointer-events-none absolute top-0 left-0 overflow-visible" width={rowWidth} height={m.topPad + 10} aria-hidden="true">
           {segments.map((s) => {
-            if (mode === 'placing' || !s.revealed) {
+            if (!s.revealed) {
               return <path key={s.key} d={s.d} fill="none" stroke="var(--thread)" strokeOpacity={0.22} strokeWidth={2} strokeLinecap="round" />
             }
             return (
@@ -142,7 +144,7 @@ export const Table = forwardRef<HTMLDivElement, Props>(function Table(
             const mine = c.owner_player_id === myPlayerId
             const revealed = c.revealed_value != null
             const peeking = peekId === c.card_id && myValues[c.card_id] != null
-            const interactive = mine && mode === 'placing' && !!onMyCardPointerDown
+            const interactive = mine && mode === 'placing' && !revealed && !!onMyCardPointerDown
             if (s.hidden) {
               // Keep the dragged card's node mounted (touch events need their original target).
               return <div key={s.key} data-card-id={c.card_id} className="absolute size-0 overflow-hidden opacity-0" />
@@ -157,12 +159,18 @@ export const Table = forwardRef<HTMLDivElement, Props>(function Table(
                 style={{ width: m.w }}
                 onPointerDown={interactive ? (e) => onMyCardPointerDown!(e, c.card_id) : undefined}
                 onContextMenu={(e) => e.preventDefault()}
-                animate={revealed && c.is_wrong && !reduce && mode === 'reveal' ? { x: [0, -5, 5, -3, 3, 0] } : undefined}
+                animate={revealed && c.is_wrong && !reduce && mode !== 'result' ? { x: [0, -5, 5, -3, 3, 0] } : undefined}
               >
-                {s.ghost && (
+                {s.ghost ? (
                   <span className="absolute -top-6 left-1/2 z-10 -translate-x-1/2 rounded-full bg-ink px-2 text-[11px] font-bold whitespace-nowrap text-bg">
                     กำลังย้าย
                   </span>
+                ) : (
+                  c.card_id === nextId && (
+                    <span className="absolute -top-6 left-1/2 z-10 -translate-x-1/2 rounded-full bg-thread-ink px-2 text-[11px] font-bold whitespace-nowrap text-white">
+                      ใบถัดไป
+                    </span>
+                  )
                 )}
                 <div className={s.ghost ? 'rounded-card opacity-80 outline-2 outline-offset-2 outline-ink-muted outline-dashed' : ''}>
                   <Card

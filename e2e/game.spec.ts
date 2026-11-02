@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { createRoom, dragToTable, joinByCode, joinByLink, lockIn, newPhone, peekValue, shot } from './helpers'
+import { createRoom, dragToTable, flipAll, joinByCode, joinByLink, newPhone, peekValue, setCustomTopic, shot } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -9,16 +9,33 @@ async function playRound(phones: Page[], order: 'asc' | 'desc') {
   const values = []
   for (const p of phones) values.push({ p, v: await peekValue(p) })
   values.sort((a, b) => (order === 'asc' ? a.v - b.v : b.v - a.v))
-  for (const { p } of values) {
+  const faceDown = (p: Page) => p.getByRole('region', { name: 'โต๊ะกลาง' }).getByRole('img', { name: /^การ์ดคว่ำของ/ })
+  for (const [i, { p }] of values.entries()) {
     await dragToTable(p, 'end')
     await expect(p.getByText('การ์ดของคุณอยู่บนโต๊ะครบแล้ว')).toBeVisible()
+    // Like people at a table, the next player places after seeing this card land on their own screen.
+    for (const q of phones) await expect(faceDown(q)).toHaveCount(i + 1)
   }
-  // Everyone sees every card on the table.
-  for (const p of phones) await expect(p.getByRole('region', { name: 'โต๊ะกลาง' }).getByRole('img', { name: /^การ์ดคว่ำของ/ })).toHaveCount(phones.length)
-  return values.map((x) => x.v)
+  return values
 }
 
-test('classic: create, join (code + link), topic vote, place, lock, reveal, result, next round', async ({ browser }) => {
+/** Drag my face-down table card as far left as allowed (right after the revealed cards). */
+async function dragTableCardToStart(page: Page) {
+  const table = page.getByRole('region', { name: 'โต๊ะกลาง' })
+  const mine = table.getByRole('img', { name: /\(ของฉัน\)$/ })
+  const box = (await mine.boundingBox())!
+  const t = (await table.boundingBox())!
+  const sx = box.x + box.width / 2
+  const sy = box.y + box.height / 2
+  await page.mouse.move(sx, sy)
+  await page.mouse.down()
+  await page.mouse.move(sx - 20, sy, { steps: 3 })
+  await page.mouse.move(t.x + 40, sy, { steps: 15 })
+  await page.waitForTimeout(150)
+  await page.mouse.up()
+}
+
+test('classic: create, join (code + link), custom topic, place, flip one by one, rearrange, result, next round', async ({ browser }) => {
   const host = await newPhone(browser)
   const p2 = await newPhone(browser)
   const p3 = await newPhone(browser)
@@ -60,18 +77,20 @@ test('classic: create, join (code + link), topic vote, place, lock, reveal, resu
 
   // Start → topic
   await host.getByRole('button', { name: 'เริ่มเกม' }).click()
-  for (const p of [host, p2, p3]) await expect(p.getByText('หัวข้อรอบนี้')).toBeVisible()
-  const firstTitle = await host.locator('article h2').textContent()
+  for (const p of [host, p2, p3]) await expect(p.getByText('รอบนี้เล่นหัวข้ออะไรดี?')).toBeVisible()
+  await expect(host.getByRole('button', { name: 'แจกการ์ด' })).toBeDisabled()
+  await shot(host, '08-topic-empty')
 
-  // Two of three vote → reroll
-  await p2.getByRole('button', { name: /ขอเปลี่ยนหัวข้อ/ }).click()
-  await expect(host.getByRole('button', { name: /ขอเปลี่ยนหัวข้อ \(1\/2\)/ })).toBeVisible()
-  await shot(p2, '08-topic-voted')
-  await p3.getByRole('button', { name: /ขอเปลี่ยนหัวข้อ/ }).click()
-  await expect(host.locator('article h2')).not.toHaveText(firstTitle!)
+  // A guest taps a suggestion, then another guest writes their own idea; everyone sees the latest.
+  await p2.getByRole('tab', { name: 'ปั่นๆ' }).click()
+  await p2.getByRole('button', { name: /เมนูแก้แฮงค์/ }).click()
+  await expect(host.locator('article h2')).toHaveText('เมนูแก้แฮงค์')
+  await setCustomTopic(p3, 'ความเมาของเพื่อนแต่ละคน', 'สร่างเป๊ะ', 'คลานกลับบ้าน')
+  for (const p of [host, p2]) await expect(p.locator('article h2')).toHaveText('ความเมาของเพื่อนแต่ละคน')
+  await expect(host.getByText('ตั้งโดย เจ')).toBeVisible()
   await shot(host, '09-topic-host')
 
-  await host.getByRole('button', { name: 'ใช้หัวข้อนี้' }).click()
+  await host.getByRole('button', { name: 'แจกการ์ด' }).click()
 
   // Play
   await expect(p2.getByText('กดค้างเพื่อดูเลข · แตะเพื่อพิมพ์คำใบ้ · ลากขึ้นไปวางบนโต๊ะ')).toBeVisible()
@@ -93,40 +112,55 @@ test('classic: create, join (code + link), topic vote, place, lock, reveal, resu
   await p3.mouse.up()
 
   const placed = await playRound([host, p2, p3], 'asc')
-  await expect(host.getByText(/รอ .* กดมั่นใจแล้ว \(0\/3\)/)).toBeVisible()
   await expect(host.getByRole('button', { name: 'คำใบ้ของ มิ้นท์: ข้าวมันไก่' })).toBeVisible() // other players see the clue
-  await shot(host, '13-play-table-full')
+  await expect(host.getByText('ใบถัดไป', { exact: true })).toBeVisible()
+  const phones = [host, p2, p3]
+  // Exactly one phone (the owner of the leftmost card) gets the flip button; others see who to wait for.
+  const owners = await Promise.all(phones.map((p) => p.getByRole('button', { name: 'เปิดการ์ดของฉัน' }).isVisible()))
+  expect(owners.filter(Boolean)).toHaveLength(1)
+  const waiting = phones[owners.indexOf(false)]
+  await expect(waiting.getByText(/รอ .* เปิดใบถัดไป/)).toBeVisible()
+  await shot(phones[owners.indexOf(true)], '13-play-my-turn')
+  await shot(waiting, '14-play-waiting-flip')
 
-  // Lock, then a move resets everyone's lock
-  await lockIn(host)
-  await lockIn(p2)
-  await expect(p3.getByText(/กดมั่นใจแล้ว \(2\/3\)/)).toBeVisible()
-  await shot(p3, '14-play-waiting-lock')
+  // First flip, then the table is still live.
+  await phones[owners.indexOf(true)].getByRole('button', { name: 'เปิดการ์ดของฉัน' }).click()
+  for (const p of phones) await expect(p.getByText('เปิดแล้ว 1/3')).toBeVisible()
+  await shot(p2, '15-play-after-first-flip')
 
-  await lockIn(p3)
-
-  // Reveal on every phone
-  for (const p of [host, p2, p3]) await expect(p.getByText(/เปิดแล้ว \d\/3/)).toBeVisible()
-  await expect(p2.getByText('เปิดแล้ว 1/3')).toBeVisible({ timeout: 6000 })
-  await shot(p2, '15-reveal-progress')
-
-  for (const p of [host, p2, p3]) await expect(p.getByRole('heading', { name: 'ร้อยด้ายสำเร็จ!' })).toBeVisible({ timeout: 20_000 })
+  await flipAll(phones)
+  for (const p of phones) await expect(p.getByRole('heading', { name: 'ร้อยด้ายสำเร็จ!' })).toBeVisible({ timeout: 20_000 })
   await shot(host, '16-result-win')
 
   // Result list is sorted by value and shows the clue
   const listNumbers = await host.locator('ol li span.num.w-11').allTextContents()
-  expect(listNumbers.map(Number)).toEqual([...placed].sort((a, b) => a - b))
+  expect(listNumbers.map(Number)).toEqual(placed.map((x) => x.v).sort((a, b) => a - b))
   await expect(host.getByText('“ข้าวมันไก่”').first()).toBeVisible()
   await expect(p2.getByText(/รอ บอส ไปรอบต่อไป/)).toBeVisible()
 
-  // Round 2, deliberately reversed → broken thread
+  // Round 2: the room remembers round 1's topic; pick it again from "วงนี้เคยเล่น".
   await host.getByRole('button', { name: 'เล่นรอบต่อไป' }).click()
-  for (const p of [host, p2, p3]) await expect(p.getByText('รอบที่ 2 · หัวข้อรอบนี้')).toBeVisible()
-  await host.getByRole('button', { name: 'ใช้หัวข้อนี้' }).click()
-  await playRound([host, p2, p3], 'desc')
-  for (const p of [host, p2, p3]) await lockIn(p)
-  for (const p of [host, p2, p3]) await expect(p.getByRole('heading', { name: 'ด้ายขาด 2 จุด' })).toBeVisible({ timeout: 20_000 })
-  await shot(p3, '17-result-broken')
+  for (const p of phones) await expect(p.getByText('รอบที่ 2 · หัวข้อรอบนี้')).toBeVisible()
+  await p2.getByRole('tab', { name: /วงนี้เคยเล่น/ }).click()
+  await p2.getByRole('button', { name: /ความเมาของเพื่อนแต่ละคน/ }).click()
+  await expect(host.locator('article h2')).toHaveText('ความเมาของเพื่อนแต่ละคน')
+  await host.getByRole('button', { name: 'แจกการ์ด' }).click()
+
+  // Placed highest-first. After the first (highest) flip, the owner of the last card uses the new
+  // information and moves it forward: it becomes the next card, so the turn moves to them.
+  const desc = await playRound(phones, 'desc')
+  const order = desc // highest first
+  await order[0].p.getByRole('button', { name: 'เปิดการ์ดของฉัน' }).click()
+  for (const p of phones) await expect(p.getByText('เปิดแล้ว 1/3')).toBeVisible()
+  const lastOwner = order[2].p
+  await expect(lastOwner.getByRole('button', { name: 'เปิดการ์ดของฉัน' })).toHaveCount(0)
+  await dragTableCardToStart(lastOwner)
+  await expect(lastOwner.getByRole('button', { name: 'เปิดการ์ดของฉัน' })).toBeVisible()
+  await shot(lastOwner, '17-play-rearranged-after-flip')
+  await flipAll(phones)
+  for (const p of phones) await expect(p.getByRole('heading', { name: 'ด้ายขาด 2 จุด' })).toBeVisible({ timeout: 20_000 })
+  expect(desc).toHaveLength(3)
+  await shot(p3, '18-result-broken')
 
   // Rejoin after refresh (screen lock / reload)
   await p2.reload()
@@ -144,24 +178,27 @@ test('level up: hearts, level 2 with two cards, game over', async ({ browser }) 
   await joinByCode(p2, 'ต้น', code)
   await host.getByRole('radio', { name: 'ท้าทาย (Level Up)' }).click()
   await expect(p2.getByRole('radio', { name: 'ท้าทาย (Level Up)' })).toHaveAttribute('aria-checked', 'true')
-  await shot(host, '18-lobby-levelup-dark')
+  await shot(host, '19-lobby-levelup-dark')
 
   await host.getByRole('button', { name: 'เริ่มเกม' }).click()
   await expect(host.getByText(/คนละ 1 ใบ/)).toBeVisible()
-  await shot(host, '19-topic-levelup-dark')
-  await host.getByRole('button', { name: 'ใช้หัวข้อนี้' }).click()
+  await p2.getByRole('button', { name: 'สุ่มหัวข้อจากไอเดีย' }).click()
+  await expect(host.locator('article h2')).toBeVisible()
+  await shot(host, '20-topic-levelup-dark')
+  await host.getByRole('button', { name: 'แจกการ์ด' }).click()
 
   // Level 1 perfect
   await playRound([host, p2], 'asc')
-  await shot(host, '20-play-levelup-dark')
-  for (const p of [host, p2]) await lockIn(p)
+  await shot(host, '21-play-levelup-dark')
+  await flipAll([host, p2])
   await expect(host.getByRole('heading', { name: 'ร้อยด้ายสำเร็จ!' })).toBeVisible({ timeout: 20_000 })
-  await shot(host, '21-result-levelup-win-dark', 1600)
+  await shot(host, '22-result-levelup-win-dark', 1600)
   await host.getByRole('button', { name: 'ไป Level 2' }).click()
 
-  // Level 2: two cards each, place everything descending → 3 wrong ≥ 3 hearts → game over
+  // Level 2: two cards each, placed descending → the 3rd wrong card ends the game on the spot
   await expect(host.getByText(/คนละ 2 ใบ/)).toBeVisible()
-  await host.getByRole('button', { name: 'ใช้หัวข้อนี้' }).click()
+  await host.getByRole('button', { name: 'สุ่มหัวข้อจากไอเดีย' }).click()
+  await host.getByRole('button', { name: 'แจกการ์ด' }).click()
   for (const p of [host, p2]) await expect(p.getByRole('button', { name: /^การ์ดของฉัน/ })).toHaveCount(2)
   const all: { p: Page; v: number }[] = []
   for (const p of [host, p2]) for (let i = 0; i < 2; i++) all.push({ p, v: await peekValue(p, i) })
@@ -174,10 +211,10 @@ test('level up: hearts, level 2 with two cards, game over', async ({ browser }) 
     for (let i = 0; i < count; i++) if ((await peekValue(p, i)) === v) idx = i
     await dragToTable(p, 'end', idx)
   }
-  for (const p of [host, p2]) await lockIn(p)
+  await flipAll([host, p2])
   await expect(host.getByRole('heading', { name: 'Game Over' })).toBeVisible({ timeout: 25_000 })
   await expect(host.getByText('ไปได้ไกลสุด Level 2')).toBeVisible()
-  await shot(host, '22-game-over-dark', 1600)
+  await shot(host, '23-game-over-dark', 1600)
 })
 
 test('host migration: closing the host tab hands the room to the next player', async ({ browser }) => {
@@ -198,12 +235,12 @@ test('host migration: closing the host tab hands the room to the next player', a
 test('how-to slides and 404', async ({ browser }) => {
   const p = await newPhone(browser)
   await p.goto('/how')
-  await shot(p, '23-howto-1')
+  await shot(p, '24-howto-1')
   for (let i = 0; i < 3; i++) await p.getByRole('button', { name: 'ถัดไป' }).click()
-  await shot(p, '24-howto-4')
+  await shot(p, '25-howto-4')
   await p.goto('/r/ZZZZ')
   await p.getByLabel('ชื่อเล่นของคุณ').fill('หลงทาง')
   await p.getByRole('button', { name: 'เข้าห้อง' }).click()
   await expect(p.getByText('ไม่เจอห้องนี้ ลองเช็กโค้ดอีกทีนะ')).toBeVisible()
-  await shot(p, '25-room-not-found')
+  await shot(p, '26-room-not-found')
 })

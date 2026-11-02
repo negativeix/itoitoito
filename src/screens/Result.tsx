@@ -15,7 +15,11 @@ import { placements } from '../lib/judge'
 import { sound } from '../lib/sound'
 import { myPlayer, useRoom } from '../store/roomStore'
 import { toast } from '../store/toastStore'
-import { revealOrder } from './Reveal'
+import type { BoardCard } from '../lib/types'
+
+function revealOrder(board: BoardCard[], round: number) {
+  return board.filter((c) => c.round === round && c.reveal_order != null).sort((a, b) => a.reveal_order! - b.reveal_order!)
+}
 
 export function Result() {
   const room = useRoom((s) => s.room)!
@@ -113,7 +117,10 @@ export function Result() {
               {r.owner && <PlayerAvatar player={r.owner} size="sm" />}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold">{r.owner?.name ?? 'ผู้เล่น'}</p>
-                <p className="truncate text-sm text-ink-muted">{r.card.clue ? `“${r.card.clue}”` : 'ไม่ได้ใส่คำใบ้'}</p>
+                <p className="truncate text-sm text-ink-muted">
+                  {r.card.is_wrong === null ? 'ไม่ทันได้เปิด · ' : ''}
+                  {r.card.clue ? `“${r.card.clue}”` : 'ไม่ได้ใส่คำใบ้'}
+                </p>
               </div>
               {r.placed !== r.correct && (
                 <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-ink-muted" aria-label={`วางไว้ลำดับ ${r.placed} ควรอยู่ลำดับ ${r.correct}`}>

@@ -9,3 +9,6 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .DS_Store
+e2e/.results
+playwright-report
+docs/screenshots

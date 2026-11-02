@@ -117,7 +117,7 @@ export function Card({
       {mine && (
         <>
           <div className="pointer-events-none absolute -inset-[5px] rounded-[25px] border-[3px] border-thread" aria-hidden="true" />
-          <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-thread px-2 text-xs font-bold whitespace-nowrap text-white">
+          <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-thread-ink px-2 text-xs font-bold whitespace-nowrap text-white">
             ของฉัน
           </span>
         </>

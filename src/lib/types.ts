@@ -28,6 +28,7 @@ export type Room = {
   theme_rerolls: number
   reveal_index: number
   last_result: RoundResult | null
+  roster_version: number
   updated_at: string
 }
 

@@ -31,6 +31,9 @@ create table rooms (
   reveal_index int not null default -1,     -- reveal_order of the last revealed card
   last_reveal_at timestamptz,
   last_result jsonb,                        -- {wrong, total, perfect, lives_before, lives_after, level, deck_complete}
+  -- Bumped whenever players/cards are deleted. Realtime cannot filter DELETE events by room,
+  -- so clients watch this (filterable) rooms UPDATE and refetch instead.
+  roster_version int not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

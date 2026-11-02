@@ -11,6 +11,10 @@
   --success: #2f9e6b;
   --danger: #d6453d;
   --line: #ddd2bf;
+  /* Darker variants for small text and pills so they pass WCAG AA (4.5:1) on paper. */
+  --thread-ink: #c4282e;
+  --success-ink: #1f7a50;
+  --danger-ink: #b3302a;
 
   --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.04), 0 8px 24px -8px rgba(60, 40, 20, 0.25);
   --shadow-lift: 0 2px 0 rgba(0, 0, 0, 0.04), 0 18px 36px -10px rgba(60, 40, 20, 0.38);
@@ -32,6 +36,9 @@
     --success: #3dbe85;
     --danger: #ff6b61;
     --line: #3a342b;
+    --thread-ink: #ff7075;
+    --success-ink: #4fd197;
+    --danger-ink: #ff8279;
 
     --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.3), 0 8px 24px -8px rgba(0, 0, 0, 0.6);
     --shadow-lift: 0 2px 0 rgba(0, 0, 0, 0.3), 0 18px 36px -10px rgba(0, 0, 0, 0.75);
@@ -52,6 +59,9 @@
   --success: #3dbe85;
   --danger: #ff6b61;
   --line: #3a342b;
+  --thread-ink: #ff7075;
+  --success-ink: #4fd197;
+  --danger-ink: #ff8279;
 
   --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.3), 0 8px 24px -8px rgba(0, 0, 0, 0.6);
   --shadow-lift: 0 2px 0 rgba(0, 0, 0, 0.3), 0 18px 36px -10px rgba(0, 0, 0, 0.75);
@@ -72,9 +82,12 @@
   --color-success: var(--success);
   --color-danger: var(--danger);
   --color-line: var(--line);
+  --color-thread-ink: var(--thread-ink);
+  --color-success-ink: var(--success-ink);
+  --color-danger-ink: var(--danger-ink);
 
   --font-sans: 'Anuphan', ui-sans-serif, system-ui, sans-serif;
-  --font-num: 'Fraunces', ui-serif, Georgia, serif;
+  --font-num: 'Fraunces Variable', 'Fraunces', ui-serif, Georgia, serif;
 
   --radius-card: 20px;
   --radius-btn: 16px;

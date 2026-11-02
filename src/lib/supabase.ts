@@ -1,13 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { isConfigured, SUPABASE_ANON_KEY, SUPABASE_URL } from './env'
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
-
-/** False until VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are set (see .env.example). */
-export const isConfigured = Boolean(url && key)
+export { isConfigured }
 
 export const supabase: SupabaseClient = isConfigured
-  ? createClient(url!, key!, {
+  ? createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
       auth: { persistSession: true, autoRefreshToken: true, storageKey: 'ito.auth' },
       realtime: { params: { eventsPerSecond: 30 } },
     })

@@ -1,1 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#E0393E"/><text x="32" y="44" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="34" fill="#fff">ito</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#E0393E"/>
+  <text x="256" y="292" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="200" fill="#FFFBF4" letter-spacing="-6">ito</text>
+  <path d="M120 352 L170 352 C190 352 196 316 220 316 C244 316 244 352 222 352 C204 352 214 316 246 316 C270 316 270 352 248 352 C230 352 240 316 272 316 C296 316 302 352 322 352 L392 352" fill="none" stroke="#FFFBF4" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

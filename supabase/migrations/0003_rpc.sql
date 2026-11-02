@@ -245,6 +245,8 @@ begin
     return;
   end if;
 
+  update rooms set roster_version = roster_version + 1 where id = r.id;
+
   if r.host_user_id = p.user_id then
     select user_id into v_new_host from players
     where room_id = r.id and left_at is null order by spectating, seat limit 1;

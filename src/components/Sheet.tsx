@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useReducedMotion, type PanInfo } from 'motion/react'
+import { AnimatePresence, motion, useDragControls, useReducedMotion, type PanInfo } from 'motion/react'
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { paperSpring } from '../lib/motion'
@@ -15,6 +15,7 @@ export function Sheet({ open, onClose, title, children }: Props) {
   const reduce = useReducedMotion()
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
+  const dragControls = useDragControls()
 
   useEffect(() => {
     if (!open) return
@@ -54,21 +55,26 @@ export function Sheet({ open, onClose, title, children }: Props) {
             aria-modal="true"
             aria-labelledby={titleId}
             tabIndex={-1}
-            className="safe-x safe-bottom relative w-full max-w-lg rounded-t-[28px] bg-surface pt-3 shadow-lift outline-none"
+            className="safe-x safe-bottom relative flex max-h-[92dvh] w-full max-w-lg flex-col rounded-t-[28px] bg-surface shadow-lift outline-none"
             initial={reduce ? { opacity: 0 } : { y: '100%' }}
             animate={reduce ? { opacity: 1 } : { y: 0 }}
             exit={reduce ? { opacity: 0 } : { y: '100%' }}
             transition={paperSpring}
             drag={reduce ? false : 'y'}
+            dragListener={false}
+            dragControls={dragControls}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.6 }}
             onDragEnd={onDragEnd}
           >
-            <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-line" aria-hidden="true" />
-            <h2 id={titleId} className="mb-4 text-xl font-bold">
-              {title}
-            </h2>
-            {children}
+            {/* Only the handle area drags, so inputs and scrolling inside stay usable. */}
+            <div className="shrink-0 cursor-grab touch-none pt-3" onPointerDown={(e) => dragControls.start(e)}>
+              <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-line" aria-hidden="true" />
+              <h2 id={titleId} className="mb-4 text-xl font-bold">
+                {title}
+              </h2>
+            </div>
+            <div className="-mx-4 min-h-0 overflow-y-auto px-4">{children}</div>
           </motion.div>
         </div>
       )}

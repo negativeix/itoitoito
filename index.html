@@ -7,16 +7,21 @@
     <meta name="theme-color" content="#17140F" media="(prefers-color-scheme: dark)" />
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;700&family=Fraunces:opsz,wght@9..144,600..800&display=swap"
-    />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="description" content="ร้อยความคิดให้ตรงกัน — เกม ito สำหรับเล่นกับเพื่อนในวง ทุกคนใช้มือถือตัวเองเป็นการ์ด" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="ito" />
+    <style>html{background:#F5EFE4;color:#1E1A15}@media (prefers-color-scheme:dark){html{background:#17140F;color:#F3EDE2}}</style>
     <title>ito · ร้อยความคิดให้ตรงกัน</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Static splash: paints before the JS bundle runs; React replaces it on mount. -->
+      <div style="min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-family:Georgia,serif">
+        <span style="font-size:96px;font-weight:700;line-height:1;letter-spacing:-0.02em">ito</span>
+        <span style="font-family:system-ui,sans-serif;font-size:20px;opacity:.6">ร้อยความคิดให้ตรงกัน</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

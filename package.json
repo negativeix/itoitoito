@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "gen:themes": "node --experimental-strip-types --no-warnings scripts/gen-themes-sql.mjs",
+    "db:reset": "supabase db reset"
   },
   "dependencies": {
     "motion": "^14.9.0",
@@ -21,6 +23,7 @@
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6.1.2",
+    "supabase": "^2.122.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"

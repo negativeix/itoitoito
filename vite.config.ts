@@ -9,6 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false, // registered manually in main.tsx (with periodic update checks)
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'ito',

@@ -88,7 +88,9 @@ create table heartbeats (
 create or replace function public._touch_updated_at() returns trigger
 language plpgsql as $$
 begin
-  new.updated_at := now();
+  if new.updated_at is not distinct from old.updated_at then
+    new.updated_at := now();
+  end if;
   return new;
 end $$;
 

@@ -9,15 +9,24 @@
     "preview": "vite preview",
     "typecheck": "tsc",
     "gen:themes": "node --experimental-strip-types --no-warnings scripts/gen-themes-sql.mjs",
-    "db:reset": "supabase db reset"
+    "db:reset": "supabase db reset",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:db": "vitest run --project db"
   },
   "dependencies": {
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource/anuphan": "^5.3.0",
+    "@supabase/supabase-js": "^2.118.0",
     "motion": "^14.9.0",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.30.6"
+    "react-router-dom": "^6.30.6",
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.6",
     "@types/react": "^18.3.31",
@@ -26,6 +35,8 @@
     "supabase": "^2.122.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.0.5"
   }
 }

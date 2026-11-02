@@ -10,8 +10,8 @@ type Props = {
 }
 
 /**
- * During placing: each player's avatar with a mini card stack showing how many cards are still in
- * their hand, or a faded ✓ when they've placed them all. Hidden once everything is on the table.
+ * Each player's avatar with a mini card stack showing how many of their cards are still face down
+ * (in hand or on the table), or a faded ✓ once they have flipped them all.
  */
 export function HandCounts({ players, board, myPlayerId, show }: Props) {
   return (
@@ -24,13 +24,13 @@ export function HandCounts({ players, board, myPlayerId, show }: Props) {
           exit={{ height: 0, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 400, damping: 34 }}
           className="flex flex-wrap justify-center gap-x-4 gap-y-1 overflow-hidden pt-1 pb-1.5"
-          aria-label="การ์ดในมือของแต่ละคน"
+          aria-label="การ์ดที่ยังไม่เปิดของแต่ละคน"
         >
           {players.map((p) => {
-            const left = board.filter((c) => c.owner_player_id === p.id && c.position == null).length
+            const left = board.filter((c) => c.owner_player_id === p.id && c.revealed_value == null).length
             const name = p.id === myPlayerId ? 'คุณ' : p.name
             return (
-              <li key={p.id} className="flex w-12 flex-col items-center" aria-label={left ? `${name} เหลือ ${left} ใบในมือ` : `${name} วางครบแล้ว`}>
+              <li key={p.id} className="flex w-12 flex-col items-center" aria-label={left ? `${name} เหลือ ${left} ใบที่ยังไม่เปิด` : `${name} เปิดครบแล้ว`}>
                 <span className="relative">
                   <span className={left ? '' : 'opacity-45'}>
                     <PlayerAvatar player={p} size="sm" />

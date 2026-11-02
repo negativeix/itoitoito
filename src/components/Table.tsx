@@ -87,7 +87,8 @@ export const Table = forwardRef<HTMLDivElement, Props>(function Table(
     const y = m.topPad + 6
     const d = `M${x1} ${y} Q${(x1 + x2) / 2} ${y - 26} ${x2} ${y}`
     const card = s.kind === 'card' ? s.card : null
-    const revealed = card?.revealed_value != null
+    // Cards shown at the end of a lost round were never flipped (is_wrong null): no thread to them.
+    const revealed = card?.revealed_value != null && card.is_wrong != null
     return { key: s.key, d, revealed, wrong: !!card?.is_wrong }
   })
 
@@ -171,7 +172,15 @@ export const Table = forwardRef<HTMLDivElement, Props>(function Table(
                     </span>
                   )
                 )}
-                <div className={s.ghost ? 'rounded-card opacity-80 outline-2 outline-offset-2 outline-ink-muted outline-dashed' : ''}>
+                <div
+                  className={
+                    s.ghost
+                      ? 'rounded-card opacity-80 outline-2 outline-offset-2 outline-ink-muted outline-dashed'
+                      : revealed && c.is_wrong == null
+                        ? 'opacity-60'
+                        : ''
+                  }
+                >
                   <Card
                     className="w-full"
                     value={revealed ? c.revealed_value : peeking ? myValues[c.card_id] : null}

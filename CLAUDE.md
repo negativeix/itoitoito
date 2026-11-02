@@ -36,14 +36,15 @@ Vite + React 18 + TypeScript + Tailwind CSS v4 + `motion` + @dnd-kit + Zustand +
 - **Never subscribe to `hands`** (not published). Putting an unpublished table in the same channel breaks the whole channel's postgres_changes.
 - **Host liveness** for migration uses the `heartbeats` table (RPC `heartbeat` every 10 s), not presence alone, so the server can verify "host gone > 20 s".
 - **Drag is custom pointer code** (not @dnd-kit) because one gesture must separate tap (clue), hold (peek) and drag. Keep the dragged card's DOM node mounted during a drag (iOS drops touch events for removed targets).
-- **Flip one card at a time (real-life flow, replaces the plan's lock → auto-reveal).** Once every card is on the table, the owner of the leftmost face-down card taps "เปิดการ์ดของฉัน" (`flip_next(room, card)`; host may flip for an offline owner; `reveal_all` is a host shortcut). Between flips everyone may keep moving their face-down cards, but only to the right of revealed ones (enforced in `move_card`). No lock / "มั่นใจแล้ว" step. Level Up ends the moment hearts hit 0; unflipped cards are shown in the result with `is_wrong = null`.
+- **Free flipping (real-life flow, replaces the plan's lock → auto-reveal).** Anyone may flip one of their own face-down cards at any time (`flip_card`, migration 0004): no need for everyone to place first, no turn order. The client flips the player's lowest card, behind a two-tap confirm. A flipped card joins the revealed row; face-down cards can only sit to its right (`move_card`). Classic: the first wrong card ends the round and every number is shown (unflipped cards keep `is_wrong = null`). Level Up: each wrong card costs a heart; 0 hearts ends the game. `reveal_all` is a host shortcut.
 - **Topics are custom-first.** Any player sets the topic (`set_theme`); `src/data/themes.ts` is only a client-side suggestion list (no themes table, no reroll votes, no category setting). Played topics are kept per room in `rooms.theme_history` for "วงนี้เคยเล่น".
 - Two players dropping at the same spot before seeing each other's move can get equal positions; ties break by card id identically on every client, and players can simply move again.
 - Zustand selectors must return stable references — derive arrays with `useMemo` outside the selector.
 - Small red/green text uses `--thread-ink` / `--success-ink` / `--danger-ink` (WCAG AA); brand `--thread` stays for large elements.
 
 ## Testing
-- `npm run test:unit`, `npm run test:db` (needs `npx supabase start`), `npx playwright test` (needs dev server too). Run DB tests a few seconds after `db reset` (realtime restarts).
+- `npm run test:unit`, `npm run test:db` (needs `npx supabase start`), `npx playwright test` (starts its own server with `--mode e2e`, which reads `.env.e2e.local` → local Supabase; never run tests against production). Run DB tests a few seconds after `db reset` (realtime restarts).
+- Migrations 0001–0004 are applied in production: never edit them; add a new migration file instead.
 - Any change to RLS or RPCs must keep `supabase/tests/rls.test.ts` green.
 
 ## Design quick reference (section 2)

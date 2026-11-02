@@ -157,7 +157,7 @@ describe('RLS: realtime payloads', () => {
     expect(seen.every((e) => e.revealed_value === null)).toBe(true)
 
     const next = (await nextCard(users, roomId))!
-    await call(next.owner, 'flip_next', { p_room: roomId, p_card: next.card_id })
+    await call(next.owner, 'flip_card', { p_room: roomId, p_card: next.card_id })
     await sleep(1000)
     const revealed = seen.filter((e) => e.revealed_value !== null)
     expect(revealed).toHaveLength(1)

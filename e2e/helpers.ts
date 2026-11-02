@@ -90,25 +90,19 @@ export async function setCustomTopic(page: Page, title: string, low: string, hig
   await page.getByRole('button', { name: 'ใช้หัวข้อนี้' }).click()
 }
 
-const RESULT = /ร้อยด้ายสำเร็จ!|ด้ายขาด \d+ จุด|Game Over|ร้อยด้ายครบทั้งสำรับ!/
+const RESULT = /ร้อยด้ายสำเร็จ!|ด้ายขาด|Game Over|ร้อยด้ายครบทั้งสำรับ!/
 
-/** Flip phase: whoever sees "เปิดการ์ดของฉัน" taps it, until the round is over. Returns flips made. */
-export async function flipAll(phones: Page[]) {
-  let flips = 0
-  for (let guard = 0; guard < 60; guard++) {
-    if (await phones[0].getByRole('heading', { name: RESULT }).isVisible()) return flips
-    let clicked = false
-    for (const p of phones) {
-      const b = p.getByRole('button', { name: 'เปิดการ์ดของฉัน' })
-      if (await b.isVisible()) {
-        await b.click()
-        flips++
-        clicked = true
-        await expect(phones[0].getByText(new RegExp(`เปิดแล้ว ${flips}/`)).or(phones[0].getByRole('heading', { name: RESULT }))).toBeVisible()
-        break
-      }
-    }
-    if (!clicked) await phones[0].waitForTimeout(250)
+/** Flip my lowest face-down card: first tap arms the button, second tap flips. */
+export async function flipMine(page: Page) {
+  await page.getByRole('button', { name: 'เปิดการ์ดของฉัน' }).click()
+  await page.getByRole('button', { name: 'แตะอีกครั้งเพื่อเปิด' }).click()
+}
+
+/** Each listed phone flips its lowest card in turn, stopping early if the round ends. */
+export async function flipInOrder(phones: Page[], order: Page[]) {
+  for (const [i, p] of order.entries()) {
+    if (await phones[0].getByRole('heading', { name: RESULT }).isVisible()) return
+    await flipMine(p)
+    await expect(phones[0].getByText(new RegExp(`เปิดแล้ว ${i + 1}/`)).or(phones[0].getByRole('heading', { name: RESULT }))).toBeVisible()
   }
-  throw new Error('flip phase did not finish')
 }

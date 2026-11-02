@@ -8,7 +8,7 @@ import { Hearts } from '../components/Hearts'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { RuleChips } from '../components/RuleChips'
 import { Sheet } from '../components/Sheet'
-import { nameList, StatusLine } from '../components/StatusLine'
+import { StatusLine } from '../components/StatusLine'
 import { insertionIndex, Table } from '../components/Table'
 import { TopicBar } from '../components/TopicBar'
 import { api } from '../lib/api'
@@ -230,23 +230,35 @@ export function Play() {
 
   // ---------------------------------------------------------------- flipping
 
+  // Like the physical game: whoever feels their number is the lowest left flips it, any time.
   useRevealFeedback(board)
-  const online = useRoom((s) => s.online)
   const [flipping, setFlipping] = useState(false)
+  const [armedAt, setArmedAt] = useState(0) // two-tap confirm: one wrong flip can end the round
   const revealed = order.filter((c) => c.revealed_value != null)
+  const lastRevealed = revealed[revealed.length - 1]
   const wrongSoFar = revealed.filter((c) => c.is_wrong).length
-  const allPlaced = board.every((c) => c.position != null)
-  const next = allPlaced ? (order.find((c) => c.revealed_value == null) ?? null) : null
-  const nextOwner = next ? players.find((p) => p.id === next.owner_player_id) : null
-  const myTurn = !!next && next.owner_player_id === me.id
-  const isHost = room.host_user_id === me.user_id
+  // My face-down cards, lowest value first — flipping a higher one first would doom the lower one.
+  const myFaceDown = myCards.filter((c) => c.revealed_value == null).sort((a, b) => (values[a.card_id] ?? 0) - (values[b.card_id] ?? 0))
+  const armed = Date.now() - armedAt < 3000
+
+  useEffect(() => {
+    if (!armedAt) return
+    const t = setTimeout(() => setArmedAt(0), 3000)
+    return () => clearTimeout(t)
+  }, [armedAt])
 
   const flip = async () => {
-    if (!next) return
+    const card = myFaceDown[0]
+    if (!card) return
+    if (!armed) {
+      haptics.tap()
+      setArmedAt(Date.now())
+      return
+    }
+    setArmedAt(0)
     setFlipping(true)
-    haptics.tap()
     try {
-      await api.flipNext(room.id, next.card_id)
+      await api.flipCard(room.id, card.card_id)
     } catch (e) {
       toast((e as Error).message, 'error')
       void loadSnapshot(room.id)
@@ -258,14 +270,11 @@ export function Play() {
   // ---------------------------------------------------------------- status
 
   const active = activePlayers(players)
-  const unplaced = active.filter((p) => board.some((c) => c.owner_player_id === p.id && c.position == null))
-  const allMinePlaced = myCards.length > 0 && handCards.length === 0
-  const who = (id: string, name: string) => (id === me.id ? 'คุณ' : name)
   let status: string
   if (me.spectating) status = 'คุณเข้ามากลางรอบ รอเล่นรอบถัดไปนะ'
-  else if (unplaced.length) status = `รอ ${nameList(unplaced.map((p) => who(p.id, p.name)))} วางการ์ด (${active.length - unplaced.length}/${active.length})`
-  else if (myTurn) status = revealed.length ? 'ถึงตาคุณ! คุยกันให้พร้อมแล้วเปิดการ์ดใบถัดไป' : 'ทุกคนวางครบแล้ว ถึงตาคุณเปิดใบแรก!'
-  else status = `รอ ${nextOwner?.name ?? 'เพื่อน'} เปิดใบถัดไป · ระหว่างนี้ขยับการ์ดตัวเองได้`
+  else if (!myFaceDown.length) status = 'คุณเปิดครบแล้ว ลุ้นเพื่อนต่อ'
+  else if (!lastRevealed) status = 'ใครมั่นใจว่าเลขตัวเองน้อยที่สุด กดเปิดได้เลย'
+  else status = `ล่าสุดเปิดได้ ${lastRevealed.revealed_value} · ใครคิดว่าเลขตัวเองถัดไป เปิดเลย`
 
   const draggedCard = drag ? board.find((c) => c.card_id === drag.cardId) : null
   const handWidth = handCards.length >= 3 ? 'w-[27vw] max-w-28' : 'w-32'
@@ -275,7 +284,7 @@ export function Play() {
       <div className="sticky top-0 z-20 -mx-4 bg-bg/95 px-4 pb-2 backdrop-blur-sm">
         <TopicBar theme={room.current_theme} />
       </div>
-      <HandCounts players={active} board={board} myPlayerId={me.id} show={!me.spectating && !allPlaced} />
+      <HandCounts players={active} board={board} myPlayerId={me.id} show />
       <div className="flex items-center justify-center gap-4">
         {room.mode === 'levelup' && <Hearts lives={Math.max(0, room.lives - wrongSoFar)} level={room.level} />}
         {revealed.length > 0 && (
@@ -284,7 +293,7 @@ export function Play() {
           </span>
         )}
       </div>
-      <StatusLine tone={myTurn ? 'thread' : wrongSoFar ? 'danger' : 'muted'}>{status}</StatusLine>
+      <StatusLine tone={wrongSoFar ? 'danger' : 'muted'}>{status}</StatusLine>
       <div className="mt-2">
         <RuleChips />
       </div>
@@ -302,7 +311,6 @@ export function Play() {
           dragId={drag?.origin === 'table' ? drag.cardId : drag ? null : undefined}
           insertIndex={drag ? insertAt : null}
           ghosts={ghosts}
-          nextId={next?.card_id ?? null}
           onMyCardPointerDown={me.spectating ? undefined : (e, id) => onCardDown(e, id, 'table')}
         />
       </section>
@@ -348,34 +356,34 @@ export function Play() {
                 ))}
               </div>
               <p className="mt-2 text-center text-sm text-ink-muted">
-                {hintSeen ? 'ลากการ์ดขึ้นไปวางบนโต๊ะ' : 'กดค้างเพื่อดูเลข · แตะเพื่อพิมพ์คำใบ้ · ลากขึ้นไปวางบนโต๊ะ'}
+                {hintSeen ? 'วางบนโต๊ะไว้คุยกันก่อนก็ได้ มั่นใจแล้วกดเปิดได้เลย' : 'กดค้างเพื่อดูเลข · แตะเพื่อพิมพ์คำใบ้ · ลากขึ้นไปวางบนโต๊ะ'}
               </p>
             </>
           ) : (
             <p className="py-6 text-center text-sm text-ink-muted">
-              การ์ดของคุณอยู่บนโต๊ะครบแล้ว
-              <br />
-              กดค้างที่การ์ดบนโต๊ะเพื่อดูเลข · ลากลงมาที่นี่เพื่อเก็บคืน
+              {myFaceDown.length ? (
+                <>
+                  การ์ดของคุณอยู่บนโต๊ะครบแล้ว
+                  <br />
+                  กดค้างที่การ์ดบนโต๊ะเพื่อดูเลข · ลากลงมาที่นี่เพื่อเก็บคืน
+                </>
+              ) : (
+                'การ์ดของคุณเปิดครบแล้ว'
+              )}
             </p>
           )}
         </section>
       )}
 
       <BottomBar>
-        {me.spectating ? null : !allMinePlaced ? (
-          <PrimaryButton disabled>วางการ์ดให้ครบก่อน</PrimaryButton>
-        ) : !next ? (
-          <PrimaryButton disabled>รอเพื่อนวางการ์ดให้ครบ</PrimaryButton>
-        ) : myTurn ? (
-          <PrimaryButton onClick={flip} disabled={flipping}>
-            {flipping ? 'กำลังเปิด…' : 'เปิดการ์ดของฉัน'}
-          </PrimaryButton>
-        ) : isHost && nextOwner && !online.includes(nextOwner.user_id) ? (
-          // The owner dropped offline: the host can flip for them.
-          <PrimaryButton variant="secondary" onClick={flip} disabled={flipping}>
-            เปิดแทน {nextOwner.name} (ออฟไลน์)
-          </PrimaryButton>
-        ) : null}
+        {me.spectating || !myFaceDown.length ? null : (
+          <>
+            {myFaceDown.length > 1 && <p className="text-center text-xs text-ink-muted">จะเปิดใบที่เลขน้อยที่สุดของคุณก่อน</p>}
+            <PrimaryButton onClick={flip} disabled={flipping} className={armed ? 'animate-pulse' : ''}>
+              {flipping ? 'กำลังเปิด…' : armed ? 'แตะอีกครั้งเพื่อเปิด' : 'เปิดการ์ดของฉัน'}
+            </PrimaryButton>
+          </>
+        )}
       </BottomBar>
 
       {drag &&

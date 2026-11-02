@@ -79,6 +79,6 @@ export const api = {
   confirmTheme: (roomId: string) => rpc('confirm_theme', { p_room: roomId }),
   moveCard: (cardId: string, position: number | null) => rpc('move_card', { p_card: cardId, p_position: position }),
   setClue: (cardId: string, clue: string) => rpc('set_clue', { p_card: cardId, p_clue: clue }),
-  flipNext: (roomId: string, cardId: string) => rpc('flip_next', { p_room: roomId, p_card: cardId }),
+  flipCard: (roomId: string, cardId: string) => rpc('flip_card', { p_room: roomId, p_card: cardId }),
   revealAll: (roomId: string) => rpc('reveal_all', { p_room: roomId }),
 }

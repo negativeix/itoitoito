@@ -92,7 +92,7 @@ export async function dealAndPlace(users: Client[], roomId: string, order: 'asc'
   return placeAll(users, roomId, order)
 }
 
-/** The leftmost face-down card and the client that owns it. */
+/** The leftmost face-down card (hand cards last) and the client that owns it. */
 export async function nextCard(users: Client[], roomId: string) {
   const r = await room(roomId)
   const { data } = await admin
@@ -101,8 +101,7 @@ export async function nextCard(users: Client[], roomId: string) {
     .eq('room_id', roomId)
     .eq('round', r.round)
     .is('revealed_value', null)
-    .not('position', 'is', null)
-    .order('position')
+    .order('position', { nullsFirst: false })
     .order('card_id')
     .limit(1)
   const card = data?.[0]
@@ -112,14 +111,14 @@ export async function nextCard(users: Client[], roomId: string) {
   return { card_id: card.card_id as string, owner: users.find((u) => u.uid === owner.user_id)! }
 }
 
-/** Each next card is flipped by its owner until the round ends. */
+/** Owners flip cards in table order until the round ends. */
 export async function flipAll(users: Client[], roomId: string) {
   for (let guard = 0; guard < 200; guard++) {
     const r = await room(roomId)
     if (r.status !== 'placing') return r
     const next = await nextCard(users, roomId)
     if (!next) return r
-    await call(next.owner, 'flip_next', { p_room: roomId, p_card: next.card_id })
+    await call(next.owner, 'flip_card', { p_room: roomId, p_card: next.card_id })
   }
   throw new Error('flipping did not finish')
 }

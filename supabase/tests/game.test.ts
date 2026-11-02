@@ -109,8 +109,8 @@ describe('topic (custom first)', () => {
   })
 })
 
-describe('flip one card at a time', () => {
-  it('deals unique numbers; owners flip in table order; a perfect row wins', async () => {
+describe('free flipping (like the real game)', () => {
+  it('deals unique numbers; flipping in value order wins', async () => {
     const { users, roomId } = await setupRoom(4)
     await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 3 })
     await call(users[0], 'start_round', { p_room: roomId })
@@ -124,85 +124,53 @@ describe('flip one card at a time', () => {
     expect(done.last_result).toMatchObject({ wrong: 0, total: 12, perfect: true })
   })
 
-  it('only the next card can be flipped, only by its owner (or the host), only when all cards are placed', async () => {
+  it('anyone can flip their own card at any time, straight from the hand; never someone else\'s', async () => {
     const { users, roomId } = await setupRoom(3)
     await call(users[0], 'start_round', { p_room: roomId })
     await setTheme(users[0], roomId)
     await call(users[0], 'confirm_theme', { p_room: roomId })
+    // Nobody has placed anything yet.
     const [h1] = await myHand(users[1], roomId)
-    await call(users[1], 'move_card', { p_card: h1.card_id, p_position: 1 })
-    await expectCode(call(users[1], 'flip_next', { p_room: roomId, p_card: h1.card_id }), 'cards_not_placed')
-
-    await placeAll(users, roomId, 'asc')
-    const next = (await nextCard(users, roomId))!
-    const stranger = users.find((u) => u !== next.owner && u !== users[0])
-    if (stranger) await expectCode(call(stranger, 'flip_next', { p_room: roomId, p_card: next.card_id }), 'not_your_turn')
-
-    // Not the leftmost card → refused.
-    const { data: board } = await admin.from('board_cards').select('card_id').eq('room_id', roomId).order('position', { ascending: false }).limit(1)
-    await expectCode(call(users[0], 'flip_next', { p_room: roomId, p_card: board![0].card_id }), 'order_changed')
-
-    // The host may flip for someone else.
-    await call(users[0], 'flip_next', { p_room: roomId, p_card: next.card_id })
-    expect((await room(roomId)).reveal_index).toBe(0)
+    await expectCode(call(users[2], 'flip_card', { p_room: roomId, p_card: h1.card_id }), 'not_your_card')
+    await call(users[1], 'flip_card', { p_room: roomId, p_card: h1.card_id })
+    const { data: c } = await admin.from('board_cards').select('*').eq('card_id', h1.card_id).single()
+    expect(c!.revealed_value).toBe(h1.value)
+    expect(c!.position).not.toBeNull()
+    expect(c!.reveal_order).toBe(0)
     // Double tap: no-op.
-    await call(users[0], 'flip_next', { p_room: roomId, p_card: next.card_id })
+    await call(users[1], 'flip_card', { p_room: roomId, p_card: h1.card_id })
     expect((await room(roomId)).reveal_index).toBe(0)
   })
 
-  it('players rearrange face-down cards between flips, but only right of revealed cards', async () => {
+  it('a flipped card joins the revealed row; face-down cards stay to its right', async () => {
     const { users, roomId } = await setupRoom(3)
-    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 2 })
     await call(users[0], 'start_round', { p_room: roomId })
-    const placed = await dealAndPlace(users, roomId, 'desc') // positions 1..6, highest value first
-
-    // Flip the first (highest) card.
-    const first = (await nextCard(users, roomId))!
-    await call(first.owner, 'flip_next', { p_room: roomId, p_card: first.card_id })
-    const { data: flipped } = await admin.from('board_cards').select('*').eq('card_id', first.card_id).single()
-    expect(flipped!.revealed_value).toBe(placed[0].value)
-    expect(flipped!.is_wrong).toBe(false)
-
-    // Revealed cards are fixed; face-down ones can't go left of them.
-    await expectCode(call(first.owner, 'move_card', { p_card: first.card_id, p_position: 99 }), 'card_revealed')
-    const lowest = placed[placed.length - 1]
-    await expectCode(call(lowest.c, 'move_card', { p_card: lowest.card_id, p_position: 0.5 }), 'invalid_position')
-
-    // With the new information everyone re-sorts the rest ascending (right of position 1).
-    const rest = placed.slice(1).sort((a, b) => a.value - b.value)
-    for (let i = 0; i < rest.length; i++) await call(rest[i].c, 'move_card', { p_card: rest[i].card_id, p_position: 2 + i })
-
-    const done = await flipAll(users, roomId)
-    // Only the cards lower than the first revealed card count as wrong: all 5 here.
-    const { data: board } = await admin.from('board_cards').select('*').eq('room_id', roomId).order('reveal_order')
-    expect(board!.map((c) => c.is_wrong)).toEqual(judge(board!.map((c) => c.revealed_value)).wrong)
-    expect(done.last_result.wrong).toBe(5)
+    const placed = await dealAndPlace(users, roomId, 'asc') // positions 1..3
+    // The lowest card's owner hasn't moved it, but the highest card sits rightmost at position 3.
+    // Flip the lowest: it becomes the first revealed card, left of every face-down card.
+    await call(placed[0].c, 'flip_card', { p_room: roomId, p_card: placed[0].card_id })
+    // Now flip the *rightmost* card (the highest): it moves to sit right after the revealed row.
+    await call(placed[2].c, 'flip_card', { p_room: roomId, p_card: placed[2].card_id })
+    const { data: board } = await admin.from('board_cards').select('*').eq('room_id', roomId).order('position')
+    expect(board!.map((x) => x.card_id)).toEqual([placed[0].card_id, placed[2].card_id, placed[1].card_id])
+    await expectCode(call(placed[1].c, 'move_card', { p_card: placed[1].card_id, p_position: 0.5 }), 'invalid_position')
+    await expectCode(call(placed[2].c, 'move_card', { p_card: placed[2].card_id, p_position: 99 }), 'card_revealed')
   })
 
-  it('a stale "next card" is refused with order_changed after someone moves in front', async () => {
-    const { users, roomId } = await setupRoom(2)
-    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 2 })
-    await call(users[0], 'start_round', { p_room: roomId })
-    await dealAndPlace(users, roomId)
-    const seen = (await nextCard(users, roomId))!
-    const other = users.find((u) => u !== seen.owner)!
-    const [otherCard] = await myHand(other, roomId)
-    await call(other, 'move_card', { p_card: otherCard.card_id, p_position: -5 })
-    if (otherCard.card_id !== seen.card_id) {
-      await expectCode(call(seen.owner, 'flip_next', { p_room: roomId, p_card: seen.card_id }), 'order_changed')
-    }
-  })
-
-  it('wrong flags match judge() for a reversed row', async () => {
+  it('classic: the first wrong card snaps the thread, ends the round and shows every number', async () => {
     const { users, roomId } = await setupRoom(3)
     await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 2 })
     await call(users[0], 'start_round', { p_room: roomId })
     await dealAndPlace(users, roomId, 'desc')
-    await flipAll(users, roomId)
+    const done = await flipAll(users, roomId)
+    expect(done.status).toBe('result')
+    expect(done.reveal_index).toBe(1) // highest first (fine), then a lower card (wrong) → over
+    expect(done.last_result).toMatchObject({ wrong: 1, total: 6, perfect: false })
     const { data: board } = await admin.from('board_cards').select('*').eq('room_id', roomId).order('reveal_order')
-    const values = board!.map((c) => c.revealed_value as number)
-    expect(board!.map((c) => c.is_wrong)).toEqual(judge(values).wrong)
-    expect((await room(roomId)).last_result.wrong).toBe(5)
+    expect(board!.every((x) => x.revealed_value !== null)).toBe(true)
+    const judged = board!.filter((x) => x.is_wrong !== null)
+    expect(judged.map((x) => x.is_wrong)).toEqual(judge(judged.map((x) => x.revealed_value)).wrong)
+    expect(board!.filter((x) => x.is_wrong === null)).toHaveLength(4)
   })
 
   it('reveal_all finishes the round at once (host only)', async () => {
@@ -317,7 +285,7 @@ describe('edge cases (§8)', () => {
         const left = await admin.from('board_cards').select('card_id').eq('room_id', roomId).is('revealed_value', null)
         if (left.data!.every((c) => placed.find((p) => p.card_id === c.card_id)!.c === leaver)) break
       }
-      await call(next.owner, 'flip_next', { p_room: roomId, p_card: next.card_id })
+      await call(next.owner, 'flip_card', { p_room: roomId, p_card: next.card_id })
     }
     await call(leaver, 'leave_room', { p_room: roomId })
     const r = await room(roomId)

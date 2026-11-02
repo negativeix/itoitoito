@@ -69,8 +69,15 @@ export function Result() {
     title = 'ร้อยด้ายสำเร็จ!'
     subtitle = room.mode === 'levelup' ? `ผ่าน Level ${room.level} แบบไม่ผิดเลย${(result?.lives_after ?? 0) > (result?.lives_before ?? 0) ? ' · ได้หัวใจคืน 1' : ''}` : 'เรียงถูกทุกใบ'
   } else {
-    title = `ด้ายขาด ${result?.wrong ?? 0} จุด`
-    subtitle = room.mode === 'levelup' ? `เสีย ${result?.wrong ?? 0} หัวใจ · ผ่าน Level ${room.level}` : `ถูก ${(result?.total ?? 0) - (result?.wrong ?? 0)} จาก ${result?.total ?? 0} ใบ`
+    if (room.mode === 'levelup') {
+      title = `ด้ายขาด ${result?.wrong ?? 0} จุด`
+      subtitle = `เสีย ${result?.wrong ?? 0} หัวใจ · ผ่าน Level ${room.level}`
+    } else {
+      // Classic ends at the first wrong card.
+      const goodFlips = order.filter((c) => c.is_wrong === false).length
+      title = 'ด้ายขาด!'
+      subtitle = goodFlips ? `เปิดถูกต่อกัน ${goodFlips} ใบ ก่อนด้ายขาด` : 'ขาดตั้งแต่ใบแรกเลย'
+    }
   }
 
   const run = async (fn: () => Promise<unknown>) => {

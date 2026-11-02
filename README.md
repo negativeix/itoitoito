@@ -1,54 +1,48 @@
-# ito — ร้อยความคิดให้ตรงกัน
+<h1 align="center">ito</h1>
+<p align="center"><b>ร้อยความคิดให้ตรงกัน</b><br/>เกม ito สำหรับเล่นกับเพื่อนในวงจริง ทุกคนใช้มือถือตัวเองเป็นการ์ด</p>
 
-A mobile-first web app for playing **ito** with friends in the same room: everyone's phone is their card, and the conversation happens face to face. Full spec: [ITO_PLAN.md](ITO_PLAN.md). Project rules for contributors and AI agents: [CLAUDE.md](CLAUDE.md).
+<p align="center">
+  <img src="docs/images/home.png" width="180" alt="หน้าแรก" />
+  <img src="docs/images/topic.png" width="180" alt="ตั้งหัวข้อ" />
+  <img src="docs/images/table.png" width="180" alt="โต๊ะกลาง ถึงตาเปิดการ์ด" />
+  <img src="docs/images/win.png" width="180" alt="ร้อยด้ายสำเร็จ" />
+</p>
 
-Stack: Vite · React 18 · TypeScript · Tailwind CSS v4 · motion · Zustand · Supabase (anonymous auth, Postgres + RLS, Realtime) · vite-plugin-pwa.
+## เล่นยังไง
 
-## Run locally
+1. **ทุกคนได้เลขลับ 1–100** กดค้างที่การ์ดเพื่อแอบดู ห้ามบอกใคร
+2. **ตั้งหัวข้อ** เช่น "ความเผ็ดของอาหาร" แล้วพูดเป็นตัวอย่างแทนตัวเลข (ได้ 90 อาจพูดว่า "ต้มยำ")
+3. **ช่วยกันเรียงจากน้อยไปมาก** ลากการ์ดคว่ำของตัวเองไปวางบนโต๊ะ
+4. **เปิดทีละใบจากซ้าย** เจ้าของการ์ดเป็นคนเปิดเอง เปิดแล้วยังเรียงใบที่เหลือใหม่ได้ ใบไหนน้อยกว่าใบก่อนหน้า ด้ายขาด
 
-Requires Node 22+ and Docker Desktop.
+เป็นเกมร่วมมือ ทุกคนอยู่ทีมเดียวกัน เล่นได้ 2–10 คน
+
+## มีอะไรบ้าง
+
+- **ไม่ต้องสมัคร** สร้างห้องแล้วให้เพื่อนเข้าด้วยโค้ด 4 ตัว, QR หรือลิงก์
+- **หัวข้อตั้งเองได้** ใครในวงก็คิดได้ ถ้าตันมีไอเดียให้เลื่อนดู รวมถึงหมวด "ปั่นๆ" สำหรับวงเหล้า
+- **โหมดท้าทาย (Level Up)** มี 3 หัวใจ เลเวลยิ่งสูงยิ่งได้การ์ดเยอะ
+- **เลขลับปลอดภัยจริง** เซิร์ฟเวอร์ไม่ส่งเลขของคนอื่นมาที่เครื่องเราจนกว่าจะเปิด
+- **ติดตั้งเป็นแอปบนมือถือได้ (PWA)** มีโหมดกลางคืน เสียง และการสั่น
+
+<p align="center">
+  <img src="docs/images/levelup-dark.png" width="180" alt="โหมดท้าทาย โหมดกลางคืน" />
+</p>
+
+## ลองใช้
+
+**เล่นออนไลน์:** _(ใส่ลิงก์หลัง deploy)_ เปิดบนมือถือ → ใส่ชื่อ → สร้างห้อง → ให้เพื่อนสแกน QR
+
+**รันในเครื่อง** (ต้องมี Node 22 และ Docker)
 
 ```bash
 npm install
-npx supabase start              # local Postgres/Auth/Realtime in Docker
-npx supabase status -o env      # copy API_URL and ANON_KEY into .env.local (see below)
-npm run dev                     # http://localhost:5173 (also on your LAN for phones)
+npx supabase start   # ฐานข้อมูลในเครื่อง แล้วใส่ค่าใน .env.local ตาม .env.example
+npm run dev          # เปิด http://localhost:5173
 ```
 
-`.env.local`:
+วิธีเชื่อม Supabase จริง, deploy และรันเทส ดูที่ [docs/SETUP.md](docs/SETUP.md)
 
-```
-VITE_SUPABASE_URL=http://127.0.0.1:54321
-VITE_SUPABASE_ANON_KEY=<ANON_KEY from supabase status>
-```
+---
 
-To test on phones over Wi-Fi, set `VITE_SUPABASE_URL` to your computer's LAN IP (e.g. `http://192.168.1.73:54321`) so the phones can reach Supabase too.
-
-## Connect a real Supabase project
-
-1. Create a project at supabase.com.
-2. **Authentication → Sign In / Providers → enable "Allow anonymous sign-ins".** The app does not work without this.
-3. Push the schema: `npx supabase link --project-ref <ref>` then `npx supabase db push`. This applies `supabase/migrations/*` (tables, RLS, RPCs, and the pg_cron cleanup job).
-4. Put the project URL and **anon/publishable** key in Vercel (or `.env.local`) as `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`. Never use the service-role key in the frontend.
-5. Realtime: the migration adds `rooms`, `players`, `board_cards` to the `supabase_realtime` publication. `hands` must never be added.
-
-## Deploy (Vercel)
-
-Import the repo; framework preset **Vite**, build `npm run build`, output `dist`. Add the two env vars. `vercel.json` rewrites deep links like `/r/ABCD` to the SPA.
-
-## Scripts
-
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Dev server (LAN-exposed) |
-| `npm run build` | Typecheck + production build (with PWA service worker) |
-| `npm run test:unit` | Rule/ordering/theme unit tests |
-| `npm run test:db` | RLS + game-flow tests against local Supabase (needs `supabase start`) |
-| `npx playwright test` | Browser E2E: 2–3 simulated phones play full games (needs dev server + local Supabase) |
-| `npm run db:reset` | Re-apply all migrations to the local database |
-
-E2E screenshots are written to `docs/screenshots/` (git-ignored).
-
-## Topic ideas
-
-Suggestions live in [src/data/themes.ts](src/data/themes.ts) (client-side only — edit and redeploy, no migration needed). Players can always type their own topic; topics a room has played are remembered in `rooms.theme_history`.
+<sub>Vite · React · TypeScript · Tailwind · Supabase · ออกแบบในธีม "ด้ายแดง"</sub>

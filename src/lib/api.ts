@@ -22,7 +22,7 @@ const MESSAGES: Record<string, string> = {
   cards_not_placed: 'วางการ์ดให้ครบก่อนนะ',
   not_your_card: 'ย้ายได้เฉพาะการ์ดของตัวเอง',
   card_not_found: 'ไม่เจอการ์ดใบนี้แล้ว',
-  clue_too_long: 'คำใบ้ยาวได้ไม่เกิน 24 ตัวอักษร',
+  clue_too_long: 'คำใบ้ยาวได้ไม่เกิน 60 ตัวอักษร',
   spectating: 'คุณเข้ามากลางรอบ รอเล่นรอบถัดไปนะ',
   host_still_here: 'เจ้าของห้องยังอยู่',
   player_not_found: 'ไม่เจอผู้เล่นคนนี้แล้ว',

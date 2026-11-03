@@ -25,7 +25,7 @@ Vite + React 18 + TypeScript + Tailwind CSS v4 + `motion` + @dnd-kit + Zustand +
 1. During a round, the **topic bar + scale** (`1 · low ←→ high · 100`) is pinned at the top of every screen.
 2. **One primary button per screen**; everything else is secondary/ghost.
 3. A **status line** under the topic bar always says what we're waiting for ("รอ บอส, มิ้นท์ วางการ์ด (4/6)").
-4. **Secret numbers never leak by accident**: shown only while pressing and holding, hidden immediately on `visibilitychange`, never in `<title>` or notifications.
+4. **Secret numbers never leak by accident**: cards in your own hand are face up (user decision); on the table they're face down and peeked by press-and-hold. Everything hides immediately on `visibilitychange`, never in `<title>` or notifications.
 5. **My cards** on the table have a red-thread ring + a "ของฉัน" label.
 6. Every screen has empty / loading / error states written in plain human Thai ("กำลังต่อเน็ตใหม่…", not "Error 500").
 7. Button labels are short verbs: "สร้างห้อง", "เข้าห้อง", "เริ่มเกม", "มั่นใจแล้ว", "เปิดการ์ด".
@@ -36,7 +36,7 @@ Vite + React 18 + TypeScript + Tailwind CSS v4 + `motion` + @dnd-kit + Zustand +
 - **Never subscribe to `hands`** (not published). Putting an unpublished table in the same channel breaks the whole channel's postgres_changes.
 - **Host liveness** for migration uses the `heartbeats` table (RPC `heartbeat` every 10 s), not presence alone, so the server can verify "host gone > 20 s".
 - **Drag is custom pointer code** (not @dnd-kit) because one gesture must separate tap (clue), hold (peek) and drag. Keep the dragged card's DOM node mounted during a drag (iOS drops touch events for removed targets).
-- **Free flipping (real-life flow, replaces the plan's lock → auto-reveal).** Anyone may flip one of their own face-down cards at any time (`flip_card`, migration 0004): no need for everyone to place first, no turn order. The client flips the player's lowest card, behind a two-tap confirm. A flipped card joins the revealed row; face-down cards can only sit to its right (`move_card`). Classic: the first wrong card ends the round and every number is shown (unflipped cards keep `is_wrong = null`). Level Up: each wrong card costs a heart; 0 hearts ends the game. `reveal_all` is a host shortcut.
+- **Free flipping (real-life flow, replaces the plan's lock → auto-reveal).** Cards are flipped one by one from the left of the table, without waiting for everyone to place (`flip_card`, migration 0004). The client only lets the owner of the leftmost face-down table card flip it, behind a two-tap confirm; no flipping from the hand (the server still accepts any own card). A flipped card joins the revealed row; face-down cards can only sit to its right (`move_card`). Classic: the first wrong card ends the round and every number is shown (unflipped cards keep `is_wrong = null`). Level Up: each wrong card costs a heart; 0 hearts ends the game. `reveal_all` is a host shortcut.
 - **Topics are custom-first.** Any player sets the topic (`set_theme`); `src/data/themes.ts` is only a client-side suggestion list (no themes table, no reroll votes, no category setting). Played topics are kept per room in `rooms.theme_history` for "วงนี้เคยเล่น".
 - Two players dropping at the same spot before seeing each other's move can get equal positions; ties break by card id identically on every client, and players can simply move again.
 - Zustand selectors must return stable references — derive arrays with `useMemo` outside the selector.
@@ -44,7 +44,7 @@ Vite + React 18 + TypeScript + Tailwind CSS v4 + `motion` + @dnd-kit + Zustand +
 
 ## Testing
 - `npm run test:unit`, `npm run test:db` (needs `npx supabase start`), `npx playwright test` (starts its own server with `--mode e2e`, which reads `.env.e2e.local` → local Supabase; never run tests against production). Run DB tests a few seconds after `db reset` (realtime restarts).
-- Migrations 0001–0004 are applied in production: never edit them; add a new migration file instead.
+- Migrations 0001–0004 are applied in production (0005 raises the clue limit to 60): never edit them; add a new migration file instead.
 - Any change to RLS or RPCs must keep `supabase/tests/rls.test.ts` green.
 
 ## Design quick reference (section 2)

@@ -191,7 +191,8 @@ describe('free flipping (like the real game)', () => {
     await call(users[1], 'set_clue', { p_card: card.card_id, p_clue: '  ข้าว   มันไก่  ' })
     const { data } = await users[0].from('board_cards').select('clue').eq('card_id', card.card_id).single()
     expect(data!.clue).toBe('ข้าว มันไก่')
-    await expectCode(call(users[1], 'set_clue', { p_card: card.card_id, p_clue: 'ก'.repeat(25) }), 'clue_too_long')
+    await call(users[1], 'set_clue', { p_card: card.card_id, p_clue: 'ก'.repeat(60) })
+    await expectCode(call(users[1], 'set_clue', { p_card: card.card_id, p_clue: 'ก'.repeat(61) }), 'clue_too_long')
   })
 
   it('next round clears old cards and asks for a new topic', async () => {

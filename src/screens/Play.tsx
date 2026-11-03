@@ -16,7 +16,6 @@ import { positionAt } from '../lib/fractional'
 import { haptics } from '../lib/haptics'
 import { loadSnapshot, sendDrag } from '../lib/realtime'
 import { sound } from '../lib/sound'
-import { readLocal, writeLocal } from '../lib/storage'
 import type { BoardCard } from '../lib/types'
 import { useRevealFeedback } from '../lib/useRevealFeedback'
 import { activePlayers, effectiveBoard, myPlayer, tableOrder, useRoom } from '../store/roomStore'
@@ -24,7 +23,6 @@ import { toast } from '../store/toastStore'
 
 const HOLD_MS = 220
 const DRAG_PX = 10
-const HINT_KEY = 'ito.hint.hand'
 
 type Zone = 'table' | 'hand' | null
 type Gesture = {
@@ -60,7 +58,8 @@ export function Play() {
   const [insertAt, setInsertAt] = useState<number | null>(null)
   const [overHand, setOverHand] = useState(false)
   const [clueCard, setClueCard] = useState<BoardCard | null>(null)
-  const [hintSeen, setHintSeen] = useState(() => readLocal(HINT_KEY) === '1')
+  // Hand cards show their number (it's your hand); hide it whenever the app goes to the background.
+  const [docHidden, setDocHidden] = useState(() => document.visibilityState !== 'visible')
   const fx = useMotionValue(-999)
   const fy = useMotionValue(-999)
 
@@ -187,6 +186,7 @@ export function Play() {
     const onUp = () => end(true)
     const onCancel = () => end(false)
     const onHide = () => {
+      setDocHidden(document.visibilityState !== 'visible')
       if (document.visibilityState !== 'visible') {
         end(false)
         setPeekId(null)
@@ -217,10 +217,6 @@ export function Play() {
         g.mode = 'peek'
         setPeekId(cardId)
         haptics.tap()
-        if (!hintSeen) {
-          setHintSeen(true)
-          writeLocal(HINT_KEY, '1')
-        }
       }
     }, HOLD_MS)
     gesture.current = g
@@ -230,15 +226,19 @@ export function Play() {
 
   // ---------------------------------------------------------------- flipping
 
-  // Like the physical game: whoever feels their number is the lowest left flips it, any time.
+  // Like the physical game: lay the cards out in order, then flip them one by one from the left.
+  // Only the owner of the leftmost face-down card on the table can flip, so a new player can't
+  // flip blind from the hand. (The server allows any own card; this is a client-side guide.)
   useRevealFeedback(board)
   const [flipping, setFlipping] = useState(false)
   const [armedAt, setArmedAt] = useState(0) // two-tap confirm: one wrong flip can end the round
   const revealed = order.filter((c) => c.revealed_value != null)
   const lastRevealed = revealed[revealed.length - 1]
   const wrongSoFar = revealed.filter((c) => c.is_wrong).length
-  // My face-down cards, lowest value first — flipping a higher one first would doom the lower one.
-  const myFaceDown = myCards.filter((c) => c.revealed_value == null).sort((a, b) => (values[a.card_id] ?? 0) - (values[b.card_id] ?? 0))
+  const myFaceDown = myCards.filter((c) => c.revealed_value == null)
+  const nextOnTable = order.find((c) => c.revealed_value == null)
+  const myTurn = !!nextOnTable && nextOnTable.owner_player_id === me.id
+  const nextOwner = nextOnTable ? players.find((p) => p.id === nextOnTable.owner_player_id) : undefined
   const armed = Date.now() - armedAt < 3000
 
   useEffect(() => {
@@ -248,7 +248,7 @@ export function Play() {
   }, [armedAt])
 
   const flip = async () => {
-    const card = myFaceDown[0]
+    const card = myTurn ? nextOnTable : undefined
     if (!card) return
     if (!armed) {
       haptics.tap()
@@ -273,8 +273,13 @@ export function Play() {
   let status: string
   if (me.spectating) status = 'คุณเข้ามากลางรอบ รอเล่นรอบถัดไปนะ'
   else if (!myFaceDown.length) status = 'คุณเปิดครบแล้ว ลุ้นเพื่อนต่อ'
-  else if (!lastRevealed) status = 'ใครมั่นใจว่าเลขตัวเองน้อยที่สุด กดเปิดได้เลย'
-  else status = `ล่าสุดเปิดได้ ${lastRevealed.revealed_value} · ใครคิดว่าเลขตัวเองถัดไป เปิดเลย`
+  else {
+    const last = lastRevealed ? `ล่าสุดเปิดได้ ${lastRevealed.revealed_value} · ` : ''
+    if (myTurn) status = `${last}ถึงคิวคุณ ใบซ้ายสุดบนโต๊ะเป็นของคุณ`
+    else if (nextOwner) status = `${last}ถึงคิว ${nextOwner.name} เปิดการ์ด`
+    else status = `${last}ลากการ์ดขึ้นไปเรียงบนโต๊ะ แล้วเปิดทีละใบจากซ้าย`
+  }
+  const flipLabel = myTurn ? 'เปิดการ์ดของฉัน' : handCards.length === myFaceDown.length ? 'วางการ์ดบนโต๊ะก่อน' : `รอ ${nextOwner?.name ?? 'เพื่อน'} เปิดก่อน`
 
   const draggedCard = drag ? board.find((c) => c.card_id === drag.cardId) : null
   const handWidth = handCards.length >= 3 ? 'w-[27vw] max-w-28' : 'w-32'
@@ -311,6 +316,7 @@ export function Play() {
           dragId={drag?.origin === 'table' ? drag.cardId : drag ? null : undefined}
           insertIndex={drag ? insertAt : null}
           ghosts={ghosts}
+          nextId={nextOnTable?.card_id ?? null}
           onMyCardPointerDown={me.spectating ? undefined : (e, id) => onCardDown(e, id, 'table')}
         />
       </section>
@@ -335,12 +341,12 @@ export function Play() {
                       onContextMenu={(e) => e.preventDefault()}
                       role="button"
                       tabIndex={0}
-                      aria-label="การ์ดของฉัน กดค้างเพื่อดูเลข แตะเพื่อใส่คำใบ้ ลากขึ้นไปวางบนโต๊ะ"
+                      aria-label="การ์ดของฉัน แตะเพื่อใส่คำใบ้ ลากขึ้นไปวางบนโต๊ะ"
                     >
                       <Card
                         className="w-full"
                         value={values[c.card_id]}
-                        faceUp={peekId === c.card_id}
+                        faceUp={!docHidden && drag?.cardId !== c.card_id}
                         color={me.color}
                         name={me.name}
                       />
@@ -356,7 +362,7 @@ export function Play() {
                 ))}
               </div>
               <p className="mt-2 text-center text-sm text-ink-muted">
-                {hintSeen ? 'วางบนโต๊ะไว้คุยกันก่อนก็ได้ มั่นใจแล้วกดเปิดได้เลย' : 'กดค้างเพื่อดูเลข · แตะเพื่อพิมพ์คำใบ้ · ลากขึ้นไปวางบนโต๊ะ'}
+                แตะเพื่อพิมพ์คำใบ้ · ลากขึ้นไปวางบนโต๊ะ (บนโต๊ะจะคว่ำไว้)
               </p>
             </>
           ) : (
@@ -378,9 +384,8 @@ export function Play() {
       <BottomBar>
         {me.spectating || !myFaceDown.length ? null : (
           <>
-            {myFaceDown.length > 1 && <p className="text-center text-xs text-ink-muted">จะเปิดใบที่เลขน้อยที่สุดของคุณก่อน</p>}
-            <PrimaryButton onClick={flip} disabled={flipping} className={armed ? 'animate-pulse' : ''}>
-              {flipping ? 'กำลังเปิด…' : armed ? 'แตะอีกครั้งเพื่อเปิด' : 'เปิดการ์ดของฉัน'}
+            <PrimaryButton onClick={flip} disabled={flipping || !myTurn} className={armed && myTurn ? 'animate-pulse' : ''}>
+              {flipping ? 'กำลังเปิด…' : armed && myTurn ? 'แตะอีกครั้งเพื่อเปิด' : flipLabel}
             </PrimaryButton>
           </>
         )}
@@ -426,7 +431,7 @@ function ClueSheet({ card, onClose }: { card: BoardCard | null; onClose: () => v
         <span className="sr-only">คำใบ้</span>
         <input
           value={text}
-          maxLength={24}
+          maxLength={60}
           autoFocus
           enterKeyHint="done"
           placeholder="เช่น ต้มยำกุ้ง"
@@ -435,7 +440,7 @@ function ClueSheet({ card, onClose }: { card: BoardCard | null; onClose: () => v
           className="h-14 w-full rounded-btn border-2 border-line bg-bg px-4 text-lg outline-none focus:border-thread"
         />
       </label>
-      <p className="num mt-1 text-right text-xs text-ink-muted">{text.length}/24</p>
+      <p className="num mt-1 text-right text-xs text-ink-muted">{text.length}/60</p>
       <PrimaryButton className="mt-3" onClick={save}>
         บันทึกคำใบ้
       </PrimaryButton>

@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from 'motion/react'
-import { forwardRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { forwardRef, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { paperSpring } from '../lib/motion'
 import type { BoardCard, Player } from '../lib/types'
 import type { Ghost } from '../store/roomStore'
@@ -55,6 +55,7 @@ export const Table = forwardRef<HTMLDivElement, Props>(function Table(
 ) {
   const reduce = useReducedMotion()
   const [openClue, setOpenClue] = useState<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const byId = new Map(players.map((p) => [p.id, p]))
 
   // Build the visible slot list: remote ghosts move their card to the previewed index.
@@ -92,8 +93,47 @@ export const Table = forwardRef<HTMLDivElement, Props>(function Table(
     return { key: s.key, d, revealed, wrong: !!card?.is_wrong }
   })
 
+  // Desktop: a vertical mouse wheel scrolls the row sideways (until it reaches an end).
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return
+      const max = el.scrollWidth - el.clientWidth
+      const next = Math.max(0, Math.min(max, el.scrollLeft + e.deltaY))
+      if (max <= 0 || next === el.scrollLeft) return
+      e.preventDefault()
+      el.scrollLeft = next
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
+  // Desktop: click and drag anywhere except my own (draggable) cards to pan the row.
+  const onPanStart = (e: ReactPointerEvent) => {
+    const el = scrollRef.current
+    if (!el || e.pointerType !== 'mouse' || e.button !== 0) return
+    if ((e.target as Element).closest('[data-own-card], button')) return
+    const x0 = e.clientX
+    const s0 = el.scrollLeft
+    const move = (ev: PointerEvent) => {
+      el.scrollLeft = s0 - (ev.clientX - x0)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
   return (
-    <div className="-mx-4 overflow-x-auto overflow-y-visible overscroll-x-contain [scrollbar-width:none]" data-table-scroll>
+    <div
+      ref={scrollRef}
+      className="-mx-4 overflow-x-auto overflow-y-visible overscroll-x-contain [scrollbar-width:none] [@media(pointer:fine)]:[scrollbar-width:thin]"
+      data-table-scroll
+      onPointerDown={onPanStart}
+    >
       <div ref={rowRef} className="relative" style={{ width: Math.max(rowWidth, 0), minWidth: '100%', paddingTop: m.topPad, paddingBottom: 40 }}>
         <svg className="pointer-events-none absolute top-0 left-0 overflow-visible" width={rowWidth} height={m.topPad + 10} aria-hidden="true">
           {segments.map((s) => {
@@ -155,6 +195,7 @@ export const Table = forwardRef<HTMLDivElement, Props>(function Table(
                 layout={!reduce}
                 transition={paperSpring}
                 data-card-id={c.card_id}
+                data-own-card={interactive || undefined}
                 className={`relative shrink-0 ${interactive ? 'no-callout cursor-grab touch-none' : ''}`}
                 style={{ width: m.w }}
                 onPointerDown={interactive ? (e) => onMyCardPointerDown!(e, c.card_id) : undefined}

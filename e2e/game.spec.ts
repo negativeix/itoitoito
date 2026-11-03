@@ -23,15 +23,7 @@ async function playRound(phones: Page[], order: 'asc' | 'desc') {
   return values
 }
 
-/** Every player peeks without placing anything. */
-async function peekAll(phones: Page[]) {
-  for (const p of phones) await expect(p.getByText('มือของฉัน')).toBeVisible()
-  const values = []
-  for (const p of phones) values.push({ p, v: await peekValue(p) })
-  return values
-}
-
-test('classic: create, join (code + link), custom topic, place, flip freely, result, next round', async ({ browser }) => {
+test('classic: create, join (code + link), custom topic, place, flip in table order, result, next round', async ({ browser }) => {
   const host = await newPhone(browser)
   const p2 = await newPhone(browser)
   const p3 = await newPhone(browser)
@@ -89,7 +81,7 @@ test('classic: create, join (code + link), custom topic, place, flip freely, res
   await host.getByRole('button', { name: 'แจกการ์ด' }).click()
 
   // Play
-  await expect(p2.getByText('กดค้างเพื่อดูเลข · แตะเพื่อพิมพ์คำใบ้ · ลากขึ้นไปวางบนโต๊ะ')).toBeVisible()
+  await expect(p2.getByText('แตะเพื่อพิมพ์คำใบ้ · ลากขึ้นไปวางบนโต๊ะ (บนโต๊ะจะคว่ำไว้)')).toBeVisible()
   await shot(p2, '10-play-hand')
 
   // Clue
@@ -99,25 +91,21 @@ test('classic: create, join (code + link), custom topic, place, flip freely, res
   await p2.getByRole('button', { name: 'บันทึกคำใบ้' }).click()
   await expect(p2.getByRole('button', { name: '“ข้าวมันไก่”' })).toBeVisible()
 
-  // Peek screenshot while holding
-  const box = (await p3.getByRole('button', { name: /^การ์ดของฉัน/ }).boundingBox())!
-  await p3.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-  await p3.mouse.down()
-  await p3.waitForTimeout(600)
+  // Nothing on the table yet: nobody can flip blind from the hand.
+  await expect(p3.getByRole('button', { name: 'วางการ์ดบนโต๊ะก่อน' })).toBeDisabled()
   await shot(p3, '12-play-peek')
-  await p3.mouse.up()
 
   const phones = [host, p2, p3]
   const placed = await playRound(phones, 'asc')
   await expect(host.getByRole('button', { name: 'คำใบ้ของ มิ้นท์: ข้าวมันไก่' })).toBeVisible() // other players see the clue
 
-  // No turn order: everyone with a card can flip whenever they feel confident.
-  for (const p of phones) await expect(p.getByRole('button', { name: 'เปิดการ์ดของฉัน' })).toBeVisible()
-  await expect(host.getByText('ใครมั่นใจว่าเลขตัวเองน้อยที่สุด กดเปิดได้เลย')).toBeVisible()
+  // Only the owner of the leftmost card can flip; everyone else waits for them.
+  const lowest = placed[0].p
+  await expect(lowest.getByText(/ถึงคิวคุณ/)).toBeVisible()
+  for (const { p } of placed.slice(1)) await expect(p.getByRole('button', { name: /^รอ .+ เปิดก่อน$/ })).toBeDisabled()
   await shot(host, '13-play-ready-to-flip')
 
   // First tap arms the button, second tap flips.
-  const lowest = placed[0].p
   await lowest.getByRole('button', { name: 'เปิดการ์ดของฉัน' }).click()
   await expect(lowest.getByRole('button', { name: 'แตะอีกครั้งเพื่อเปิด' })).toBeVisible()
   await shot(lowest, '14-play-confirm-flip')
@@ -145,9 +133,9 @@ test('classic: create, join (code + link), custom topic, place, flip freely, res
   await expect(host.locator('article h2')).toHaveText('ความเมาของเพื่อนแต่ละคน')
   await host.getByRole('button', { name: 'แจกการ์ด' }).click()
 
-  // Straight from the hand, nothing placed: the highest card goes first (fine), then a lower one
-  // snaps the thread. The round ends at once and every number is shown.
-  const vals = (await peekAll(phones)).sort((a, b) => b.v - a.v)
+  // Placed highest first: the first flip is fine, then a lower one snaps the thread.
+  // The round ends at once and every number is shown.
+  const vals = await playRound(phones, 'desc')
   await flipInOrder(phones, vals.map((x) => x.p))
   for (const p of phones) await expect(p.getByRole('heading', { name: 'ด้ายขาด!' })).toBeVisible({ timeout: 20_000 })
   await expect(p3.locator('ol li')).toHaveCount(3)
@@ -192,6 +180,11 @@ test('level up: hearts, level 2 with two cards each', async ({ browser }) => {
   await host.getByRole('button', { name: 'สุ่มหัวข้อจากไอเดีย' }).click()
   await host.getByRole('button', { name: 'แจกการ์ด' }).click()
   for (const p of [host, p2]) await expect(p.getByRole('button', { name: /^การ์ดของฉัน/ })).toHaveCount(2)
+  const tableCards = (p: Page) => p.getByRole('region', { name: 'โต๊ะกลาง' }).getByRole('img', { name: /^การ์ดคว่ำของ/ })
+  for (const [i, p] of [host, host, p2, p2].entries()) {
+    await dragToTable(p, 'end')
+    for (const q of [host, p2]) await expect(tableCards(q)).toHaveCount(i + 1)
+  }
   await flipInOrder([host, p2], [host, host, p2, p2])
   await expect(host.getByRole('heading', { name: /ร้อยด้ายสำเร็จ!|ด้ายขาด|Game Over/ })).toBeVisible({ timeout: 20_000 })
   await expect(host.getByText('Level 2').first()).toBeVisible()

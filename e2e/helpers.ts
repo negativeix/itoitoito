@@ -50,17 +50,11 @@ export async function joinByLink(page: Page, name: string, code: string) {
 
 const handCards = (page: Page) => page.getByRole('button', { name: /^การ์ดของฉัน/ })
 
-/** Press and hold the n-th hand card, read the number, release. */
+/** Read the n-th hand card's number (cards in the hand are face up). */
 export async function peekValue(page: Page, n = 0): Promise<number> {
-  const card = handCards(page).nth(n)
-  const box = (await card.boundingBox())!
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-  await page.mouse.down()
-  const face = card.getByRole('img', { name: /^การ์ดเลข \d+$/ })
+  const face = handCards(page).nth(n).getByRole('img', { name: /^การ์ดเลข \d+$/ })
   await expect(face).toBeVisible()
   const label = (await face.getAttribute('aria-label'))!
-  await page.mouse.up()
-  await expect(card.getByRole('img', { name: /^การ์ดเลข/ })).toHaveCount(0)
   return Number(label.match(/\d+/)![0])
 }
 
@@ -92,13 +86,13 @@ export async function setCustomTopic(page: Page, title: string, low: string, hig
 
 const RESULT = /ร้อยด้ายสำเร็จ!|ด้ายขาด|Game Over|ร้อยด้ายครบทั้งสำรับ!/
 
-/** Flip my lowest face-down card: first tap arms the button, second tap flips. */
+/** Flip the leftmost face-down card on the table (must be mine): first tap arms, second flips. */
 export async function flipMine(page: Page) {
   await page.getByRole('button', { name: 'เปิดการ์ดของฉัน' }).click()
   await page.getByRole('button', { name: 'แตะอีกครั้งเพื่อเปิด' }).click()
 }
 
-/** Each listed phone flips its lowest card in turn, stopping early if the round ends. */
+/** Each listed phone flips the next table card in turn, stopping early if the round ends. */
 export async function flipInOrder(phones: Page[], order: Page[]) {
   for (const [i, p] of order.entries()) {
     if (await phones[0].getByRole('heading', { name: RESULT }).isVisible()) return

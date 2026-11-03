@@ -16,7 +16,7 @@
 1. **Everyone gets a secret number from 1 to 100.** Press and hold your card to peek. Never say it out loud.
 2. **Pick a topic**, like "how spicy is this food". Describe your number with an example instead ("90? Tom yum.").
 3. **Sort together, lowest to highest.** Drag your face-down card onto the shared table, starting after the red 0.
-4. **Flip when you think you're next.** No turns: whoever believes their number is the lowest left flips it. A card lower than the one before it snaps the thread, and then everyone's numbers are revealed.
+4. **Flip from the left.** Cards are flipped one by one in table order; the owner of the next card taps to flip. A card lower than one before it snaps the thread — play on to the end and count the snaps.
 
 It's cooperative — the whole table wins or loses together. 2–10 players.
 
@@ -40,7 +40,7 @@ It's cooperative — the whole table wins or loses together. 2–10 players.
   </tr>
   <tr>
     <td align="center"><b>The red thread</b><br/><sub>Each flip draws the thread on. A wrong card snaps it.</sub></td>
-    <td align="center"><b>Flip when you're sure</b><br/><sub>No turns. Lay cards out to talk it over, or flip straight from your hand.</sub></td>
+    <td align="center"><b>Flip when it's your turn</b><br/><sub>Lay cards out to talk it over, then flip one by one from the left. A snap doesn't stop the round.</sub></td>
     <td align="center"><b>Level Up mode</b><br/><sub>Three hearts, more cards every level. Dark mode included.</sub></td>
   </tr>
 </table>

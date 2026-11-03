@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { createRoom, dragToTable, flipInOrder, joinByCode, joinByLink, newPhone, peekValue, setCustomTopic, shot } from './helpers'
+import { createRoom, dragToTable, flipInOrder, flipMine, joinByCode, joinByLink, newPhone, peekValue, setCustomTopic, shot } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -120,7 +120,7 @@ test('classic: create, join (code + link), custom topic, place, flip in table or
   await shot(host, '16-result-win')
 
   // Result list is sorted by value and shows the clue
-  const listNumbers = await host.locator('ol li span.num.w-11').allTextContents()
+  const listNumbers = await host.locator('ol li span.num.w-14').allTextContents()
   expect(listNumbers.map(Number)).toEqual(placed.map((x) => x.v).sort((a, b) => a - b))
   await expect(host.getByText('“ข้าวมันไก่”').first()).toBeVisible()
   await expect(p2.getByText(/รอ บอส ไปรอบต่อไป/)).toBeVisible()
@@ -134,17 +134,22 @@ test('classic: create, join (code + link), custom topic, place, flip in table or
   await host.getByRole('button', { name: 'แจกการ์ด' }).click()
 
   // Placed highest first: the first flip is fine, then a lower one snaps the thread.
-  // The round ends at once and every number is shown.
+  // The round goes on; once every card is up, the result counts the snaps.
   const vals = await playRound(phones, 'desc')
-  await flipInOrder(phones, vals.map((x) => x.p))
-  for (const p of phones) await expect(p.getByRole('heading', { name: 'ด้ายขาด!' })).toBeVisible({ timeout: 20_000 })
+  await flipInOrder(phones, vals.slice(0, 2).map((x) => x.p))
+  for (const p of phones) await expect(p.getByText('ด้ายขาด 1 จุด')).toBeVisible()
+  await expect(vals[2].p.getByRole('button', { name: 'เปิดการ์ดของฉัน' })).toBeEnabled()
+  await shot(vals[2].p, '16b-play-after-snap')
+  await flipMine(vals[2].p)
+  for (const p of phones) await expect(p.getByRole('heading', { name: 'ด้ายขาด 2 จุด' })).toBeVisible({ timeout: 20_000 })
+  await expect(p3.getByText('เรียงถูก 1 จาก 3 ใบ')).toBeVisible()
   await expect(p3.locator('ol li')).toHaveCount(3)
-  await expect(p3.getByText(/ไม่ทันได้เปิด/)).toBeVisible()
+  await expect(p3.getByText(/ไม่ทันได้เปิด/)).toHaveCount(0)
   await shot(p3, '17-result-broken')
 
   // Rejoin after refresh (screen lock / reload)
   await p2.reload()
-  await expect(p2.getByRole('heading', { name: 'ด้ายขาด!' })).toBeVisible()
+  await expect(p2.getByRole('heading', { name: 'ด้ายขาด 2 จุด' })).toBeVisible()
 
   // Back to lobby
   await host.getByRole('button', { name: 'กลับล็อบบี้' }).click()

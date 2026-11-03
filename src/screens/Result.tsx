@@ -73,10 +73,11 @@ export function Result() {
       title = `ด้ายขาด ${result?.wrong ?? 0} จุด`
       subtitle = `เสีย ${result?.wrong ?? 0} หัวใจ · ผ่าน Level ${room.level}`
     } else {
-      // Classic ends at the first wrong card.
-      const goodFlips = order.filter((c) => c.is_wrong === false).length
-      title = 'ด้ายขาด!'
-      subtitle = goodFlips ? `เปิดถูกต่อกัน ${goodFlips} ใบ ก่อนด้ายขาด` : 'ขาดตั้งแต่ใบแรกเลย'
+      // The round is played out after a snap: count the snaps.
+      const wrong = result?.wrong ?? 0
+      const total = result?.total ?? order.length
+      title = `ด้ายขาด ${wrong} จุด`
+      subtitle = wrong === 1 ? 'พลาดไปจุดเดียว เกือบแล้ว!' : `เรียงถูก ${total - wrong} จาก ${total} ใบ`
     }
   }
 
@@ -120,7 +121,7 @@ export function Result() {
               key={r.card.card_id}
               className={`flex items-center gap-3 rounded-btn border bg-surface px-3 py-2 ${r.card.is_wrong ? 'border-danger' : 'border-line'}`}
             >
-              <span className={`num w-11 shrink-0 text-center text-2xl font-bold ${r.card.is_wrong ? 'text-danger' : ''}`}>{r.value}</span>
+              <span className={`num w-14 shrink-0 text-center text-2xl font-bold ${r.card.is_wrong ? 'text-danger' : ''}`}>{r.value}</span>
               {r.owner && <PlayerAvatar player={r.owner} size="sm" />}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold">{r.owner?.name ?? 'ผู้เล่น'}</p>

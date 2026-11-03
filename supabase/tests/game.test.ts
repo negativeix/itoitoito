@@ -157,20 +157,25 @@ describe('free flipping (like the real game)', () => {
     await expectCode(call(placed[2].c, 'move_card', { p_card: placed[2].card_id, p_position: 99 }), 'card_revealed')
   })
 
-  it('classic: the first wrong card snaps the thread, ends the round and shows every number', async () => {
+  it('classic: a snapped thread does not end the round; play on until every card is flipped', async () => {
     const { users, roomId } = await setupRoom(3)
     await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'classic', p_cards: 2 })
     await call(users[0], 'start_round', { p_room: roomId })
     await dealAndPlace(users, roomId, 'desc')
+    // First flip (the highest) is fine, the second snaps the thread — and the round goes on.
+    const first = await nextCard(users, roomId)
+    await call(first!.owner, 'flip_card', { p_room: roomId, p_card: first!.card_id })
+    const second = await nextCard(users, roomId)
+    await call(second!.owner, 'flip_card', { p_room: roomId, p_card: second!.card_id })
+    expect((await room(roomId)).status).toBe('placing')
     const done = await flipAll(users, roomId)
     expect(done.status).toBe('result')
-    expect(done.reveal_index).toBe(1) // highest first (fine), then a lower card (wrong) → over
-    expect(done.last_result).toMatchObject({ wrong: 1, total: 6, perfect: false })
+    expect(done.reveal_index).toBe(5) // 0-based: all 6 flipped
+    // Descending order: every card after the first is lower than the highest so far.
+    expect(done.last_result).toMatchObject({ wrong: 5, total: 6, perfect: false })
     const { data: board } = await admin.from('board_cards').select('*').eq('room_id', roomId).order('reveal_order')
-    expect(board!.every((x) => x.revealed_value !== null)).toBe(true)
-    const judged = board!.filter((x) => x.is_wrong !== null)
-    expect(judged.map((x) => x.is_wrong)).toEqual(judge(judged.map((x) => x.revealed_value)).wrong)
-    expect(board!.filter((x) => x.is_wrong === null)).toHaveLength(4)
+    expect(board!.every((x) => x.revealed_value !== null && x.is_wrong !== null)).toBe(true)
+    expect(board!.map((x) => x.is_wrong)).toEqual(judge(board!.map((x) => x.revealed_value)).wrong)
   })
 
   it('reveal_all finishes the round at once (host only)', async () => {
@@ -209,7 +214,7 @@ describe('free flipping (like the real game)', () => {
 })
 
 describe('level up mode', () => {
-  it('loses a heart per wrong card and ends the moment hearts run out', async () => {
+  it('loses a heart per wrong card; at 0 hearts the round is played out, then game over', async () => {
     const { users, roomId } = await setupRoom(3)
     await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'levelup', p_cards: 1 })
     await call(users[0], 'start_round', { p_room: roomId })
@@ -219,18 +224,21 @@ describe('level up mode', () => {
     let r = await flipAll(users, roomId)
     expect(r.last_result).toMatchObject({ wrong: 0, lives_before: 3, lives_after: 3, level: 1 })
 
-    // Level 2: 6 cards placed descending → the 3rd wrong card (4th flip) ends the game early.
+    // Level 2: 6 cards placed descending → hearts run out at the 3rd wrong card, play goes on.
     await call(users[0], 'next_round', { p_room: roomId })
     expect((await room(roomId)).level).toBe(2)
     await dealAndPlace(users, roomId, 'desc')
+    for (let i = 0; i < 4; i++) {
+      const next = await nextCard(users, roomId)
+      await call(next!.owner, 'flip_card', { p_room: roomId, p_card: next!.card_id })
+    }
+    expect((await room(roomId)).status).toBe('placing') // 3 wrong, 0 hearts, still playing
     r = await flipAll(users, roomId)
     expect(r.status).toBe('game_over')
-    expect(r.reveal_index).toBe(3)
-    expect(r.last_result).toMatchObject({ wrong: 3, total: 6, lives_after: 0, level: 2 })
-    // The cards nobody flipped are shown in the result but not judged.
+    expect(r.reveal_index).toBe(5)
+    expect(r.last_result).toMatchObject({ wrong: 5, total: 6, lives_after: 0, level: 2 })
     const { data: board } = await admin.from('board_cards').select('*').eq('room_id', roomId)
-    expect(board!.every((c) => c.revealed_value !== null)).toBe(true)
-    expect(board!.filter((c) => c.is_wrong === null)).toHaveLength(2)
+    expect(board!.every((c) => c.revealed_value !== null && c.is_wrong !== null)).toBe(true)
 
     await call(users[0], 'start_round', { p_room: roomId })
     r = await room(roomId)

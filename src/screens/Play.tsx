@@ -298,6 +298,17 @@ export function Play() {
           </span>
         )}
       </div>
+      {(() => {
+        // The round goes on after the thread snaps (or hearts run out); say so plainly.
+        const heartsOut = room.mode === 'levelup' && room.lives - wrongSoFar <= 0
+        if (!wrongSoFar || (room.mode === 'levelup' && !heartsOut)) return null
+        return (
+          <div className="mx-auto mt-2 max-w-sm rounded-btn border border-danger/30 bg-danger/10 px-4 py-2 text-center" role="status">
+            <p className="font-bold text-danger-ink">{heartsOut ? 'หัวใจหมดแล้ว' : `ด้ายขาด ${wrongSoFar} จุด`}</p>
+            <p className="text-sm text-ink-muted">{heartsOut ? 'เล่นต่อให้จบรอบนี้ แล้วค่อยดูผลกัน' : 'เล่นต่อให้จบรอบ แล้วค่อยดูผลกัน'}</p>
+          </div>
+        )
+      })()}
       <StatusLine tone={wrongSoFar ? 'danger' : 'muted'}>{status}</StatusLine>
       <div className="mt-2">
         <RuleChips />

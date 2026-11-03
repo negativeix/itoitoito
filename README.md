@@ -54,7 +54,7 @@ It's cooperative — the whole table wins or loses together. 2–10 players.
 
 ## Try it
 
-**Play online:** _(link coming after deploy)_ — open it on your phone, enter a nickname, create a room, and let friends scan the QR.
+**Play online:** [itoitoito.vercel.app](https://itoitoito.vercel.app) — open it on your phone, enter a nickname, create a room, and let friends scan the QR.
 
 **Run locally** (Node 22 + Docker):
 

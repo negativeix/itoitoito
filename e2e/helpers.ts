@@ -84,9 +84,9 @@ export async function dragToTable(page: Page, where: 'end' | 'start' = 'end', n 
 /** Anyone sets their own topic through the form. */
 export async function setCustomTopic(page: Page, title: string, low: string, high: string) {
   await page.getByRole('button', { name: 'ตั้งหัวข้อเอง' }).click()
-  await page.getByPlaceholder('เช่น ความเมาของเพื่อนแต่ละคน').fill(title)
-  await page.getByPlaceholder('สร่างเป๊ะ').fill(low)
-  await page.getByPlaceholder('คลานกลับบ้าน').fill(high)
+  await page.getByPlaceholder('เช่น ความดังของคนดัง').fill(title)
+  await page.getByPlaceholder('ดังในซอย').fill(low)
+  await page.getByPlaceholder('ระดับโลก').fill(high)
   await page.getByRole('button', { name: 'ใช้หัวข้อนี้' }).click()
 }
 

@@ -81,7 +81,7 @@ test('classic: create, join (code + link), custom topic, place, flip freely, res
   await p2.getByRole('tab', { name: 'ปั่นๆ' }).click()
   await p2.getByRole('button', { name: /เมนูแก้แฮงค์/ }).click()
   await expect(host.locator('article h2')).toHaveText('เมนูแก้แฮงค์')
-  await setCustomTopic(p3, 'ความเมาของเพื่อนแต่ละคน', 'สร่างเป๊ะ', 'คลานกลับบ้าน')
+  await setCustomTopic(p3, 'ความเมาของเพื่อนแต่ละคน', 'กรึ่มๆ', 'คลานกลับบ้าน')
   for (const p of [host, p2]) await expect(p.locator('article h2')).toHaveText('ความเมาของเพื่อนแต่ละคน')
   await expect(host.getByText('ตั้งโดย เจ')).toBeVisible()
   await shot(host, '09-topic-host')

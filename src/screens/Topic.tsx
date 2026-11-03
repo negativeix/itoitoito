@@ -224,12 +224,12 @@ function ThemeFormBody({ initial, onSave }: { initial: Theme | null; onSave: (t:
 
   return (
     <div className="flex flex-col gap-3 pb-2">
-      {field('หัวข้อ', title, setTitle, 60, 'เช่น ความเมาของเพื่อนแต่ละคน', !initial)}
+      {field('หัวข้อ', title, setTitle, 60, 'เช่น ความดังของคนดัง', !initial)}
       <div className="grid grid-cols-2 gap-3">
-        {field('1 หมายถึง', low, setLow, 24, 'สร่างเป๊ะ')}
-        {field('100 หมายถึง', high, setHigh, 24, 'คลานกลับบ้าน')}
+        {field('1 หมายถึง', low, setLow, 24, 'ดังในซอย')}
+        {field('100 หมายถึง', high, setHigh, 24, 'ระดับโลก')}
       </div>
-      <p className="text-xs text-ink-muted">สเกลต้องมีทิศทางเดียว: 1 คือน้อยสุด 100 คือมากสุด</p>
+      <p className="text-xs text-ink-muted">ทุกเลขยังอยู่ในหัวข้อ: 1 คือน้อยที่สุด (ไม่ใช่ "ไม่มีเลย") 100 คือมากที่สุด</p>
       <PrimaryButton
         onClick={() => onSave({ id: 'custom', category: 'custom', title: title.trim(), low: low.trim(), high: high.trim() })}
         disabled={!valid}

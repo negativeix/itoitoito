@@ -30,7 +30,7 @@ const SLIDES: Slide[] = [
     art: (
       <div className="w-full max-w-xs rounded-btn border border-line bg-surface p-4 shadow-card">
         <p className="font-bold">ความเผ็ดของอาหาร</p>
-        <ScaleLine low="ไม่เผ็ดเลย" high="เผ็ดจนน้ำตาไหล" compact />
+        <ScaleLine low="เผ็ดนิดเดียว" high="เผ็ดจนน้ำตาไหล" compact />
         <div className="mt-4 flex justify-center">
           <span className="rotate-[-2deg] rounded-[6px] border border-line bg-bg px-3 py-1 text-lg">"ต้มยำ"</span>
         </div>

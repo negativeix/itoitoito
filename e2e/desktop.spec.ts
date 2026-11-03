@@ -21,7 +21,7 @@ test('desktop keyboard: type the room code and a clue while others move cards', 
   await guest.waitForURL(new RegExp(`/r/${code}$`))
 
   await host.getByRole('button', { name: 'เริ่มเกม' }).click()
-  await setCustomTopic(host, 'ความเผ็ด', 'ไม่เผ็ด', 'เผ็ดตาย')
+  await setCustomTopic(host, 'ความเผ็ด', 'เผ็ดนิดเดียว', 'เผ็ดตาย')
   await host.getByRole('button', { name: 'แจกการ์ด' }).click()
 
   await guest.getByRole('button', { name: 'ใส่คำใบ้', exact: true }).click()

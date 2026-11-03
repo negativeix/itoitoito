@@ -255,6 +255,32 @@ describe('level up mode', () => {
     expect(r.last_result).toMatchObject({ lives_before: 1, lives_after: 2 })
   })
 
+  it('played for real: lose a heart, then a perfect level gives it back (never above 3)', async () => {
+    const { users, roomId } = await setupRoom(2)
+    await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'levelup', p_cards: 1 })
+    await call(users[0], 'start_round', { p_room: roomId })
+
+    // Level 1 placed descending: one wrong card → 3 - 1 = 2 hearts.
+    await dealAndPlace(users, roomId, 'desc')
+    let r = await flipAll(users, roomId)
+    expect(r.last_result).toMatchObject({ wrong: 1, lives_before: 3, lives_after: 2 })
+    expect(r.lives).toBe(2)
+
+    // Level 2 perfect: +1 → 3.
+    await call(users[0], 'next_round', { p_room: roomId })
+    expect((await room(roomId)).lives).toBe(2) // carried into the next level
+    await dealAndPlace(users, roomId, 'asc')
+    r = await flipAll(users, roomId)
+    expect(r.last_result).toMatchObject({ wrong: 0, lives_before: 2, lives_after: 3, level: 2 })
+    expect(r.lives).toBe(3)
+
+    // Level 3 perfect again: already full, stays at 3.
+    await call(users[0], 'next_round', { p_room: roomId })
+    await dealAndPlace(users, roomId, 'asc')
+    r = await flipAll(users, roomId)
+    expect(r.last_result).toMatchObject({ wrong: 0, lives_before: 3, lives_after: 3, level: 3 })
+  })
+
   it('ends with a deck-complete win when the next level needs more than 100 cards', async () => {
     const { users, roomId } = await setupRoom(2)
     await call(users[0], 'update_settings', { p_room: roomId, p_mode: 'levelup', p_cards: 1 })

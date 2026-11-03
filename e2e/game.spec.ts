@@ -172,28 +172,34 @@ test('level up: hearts, level 2 with two cards each', async ({ browser }) => {
   await shot(host, '20-topic-levelup-dark')
   await host.getByRole('button', { name: 'แจกการ์ด' }).click()
 
-  // Level 1 perfect
-  const placed = await playRound([host, p2], 'asc')
+  // Level 1 placed highest first: one wrong card costs a heart (3 → 2).
+  const placed = await playRound([host, p2], 'desc')
   await shot(host, '21-play-levelup-dark')
   await flipInOrder([host, p2], placed.map((x) => x.p))
-  await expect(host.getByRole('heading', { name: 'ร้อยด้ายสำเร็จ!' })).toBeVisible({ timeout: 20_000 })
-  await shot(host, '22-result-levelup-win-dark', 1600)
+  await expect(host.getByRole('heading', { name: 'ด้ายขาด 1 จุด' })).toBeVisible({ timeout: 20_000 })
+  await expect(host.getByText('เสีย 1 หัวใจ · ผ่าน Level 1')).toBeVisible()
+  await expect(host.getByLabel(/^หัวใจ 2 จาก 3/).first()).toBeVisible()
   await host.getByRole('button', { name: 'ไป Level 2' }).click()
 
-  // Level 2: two cards each, flipped straight from the hand until the round is over.
+  // Level 2: two cards each, laid out in true order → perfect → the heart comes back (2 → 3).
   await expect(host.getByText(/คนละ 2 ใบ/)).toBeVisible()
   await host.getByRole('button', { name: 'สุ่มหัวข้อจากไอเดีย' }).click()
   await host.getByRole('button', { name: 'แจกการ์ด' }).click()
   for (const p of [host, p2]) await expect(p.getByRole('button', { name: /^การ์ดของฉัน/ })).toHaveCount(2)
+  const cards: { p: Page; v: number }[] = []
+  for (const p of [host, p2]) for (const n of [0, 1]) cards.push({ p, v: await peekValue(p, n) })
+  cards.sort((a, b) => a.v - b.v)
   const tableCards = (p: Page) => p.getByRole('region', { name: 'โต๊ะกลาง' }).getByRole('img', { name: /^การ์ดคว่ำของ/ })
-  for (const [i, p] of [host, host, p2, p2].entries()) {
-    await dragToTable(p, 'end')
+  for (const [i, { p, v }] of cards.entries()) {
+    const n = (await peekValue(p, 0)) === v ? 0 : 1
+    await dragToTable(p, 'end', n)
     for (const q of [host, p2]) await expect(tableCards(q)).toHaveCount(i + 1)
   }
-  await flipInOrder([host, p2], [host, host, p2, p2])
-  await expect(host.getByRole('heading', { name: /ร้อยด้ายสำเร็จ!|ด้ายขาด|Game Over/ })).toBeVisible({ timeout: 20_000 })
-  await expect(host.getByText('Level 2').first()).toBeVisible()
-  await shot(host, '23-levelup-level2-end-dark', 1600)
+  await flipInOrder([host, p2], cards.map((x) => x.p))
+  await expect(host.getByRole('heading', { name: 'ร้อยด้ายสำเร็จ!' })).toBeVisible({ timeout: 20_000 })
+  await expect(host.getByText('ผ่าน Level 2 แบบไม่ผิดเลย · ได้หัวใจคืน 1')).toBeVisible()
+  await expect(host.getByLabel(/^หัวใจ 3 จาก 3/).first()).toBeVisible()
+  await shot(host, '22-result-levelup-win-dark', 1600)
 })
 
 test('host migration: closing the host tab hands the room to the next player', async ({ browser }) => {

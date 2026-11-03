@@ -32,6 +32,7 @@ export function CodeInput({ value, onChange, onComplete }: { value: string; onCh
             refs.current[i] = el
           }}
           value={value[i] ?? ''}
+          autoFocus={i === Math.min(value.length, 3)}
           inputMode="text"
           autoCapitalize="characters"
           autoComplete="off"

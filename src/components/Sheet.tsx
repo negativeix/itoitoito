@@ -16,23 +16,28 @@ export function Sheet({ open, onClose, title, children }: Props) {
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   const dragControls = useDragControls()
+  // Callers pass inline closures; keep the effect keyed on `open` only, or every parent
+  // re-render (a realtime update, a keystroke) would steal focus from the input being typed in.
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
 
   useEffect(() => {
     if (!open) return
     const previous = document.activeElement as HTMLElement | null
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') closeRef.current()
     }
     document.addEventListener('keydown', onKey)
     const { overflow } = document.body.style
     document.body.style.overflow = 'hidden'
-    panelRef.current?.focus()
+    // Respect an autoFocus input inside; otherwise focus the dialog itself.
+    if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus()
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = overflow
       previous?.focus?.()
     }
-  }, [open, onClose])
+  }, [open])
 
   const onDragEnd = (_: unknown, info: PanInfo) => {
     if (info.offset.y > 100 || info.velocity.y > 500) onClose()

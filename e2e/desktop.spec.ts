@@ -2,7 +2,7 @@ import { expect, test, type Browser } from '@playwright/test'
 import { createRoom, dragToTable, setCustomTopic } from './helpers'
 
 async function newDesktop(browser: Browser) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'th-TH' })
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 1100 }, locale: 'th-TH' })
   await ctx.addInitScript(() => localStorage.setItem('ito.muted', '1'))
   return ctx.newPage()
 }
@@ -34,4 +34,25 @@ test('desktop keyboard: type the room code and a clue while others move cards', 
   await expect(input).toHaveValue('ข้าวมันไก่')
   await guest.keyboard.press('Enter')
   await expect(guest.getByRole('button', { name: '“ข้าวมันไก่”' })).toBeVisible()
+
+  // A 60-character clue with no spaces stays inside its card and opens in a wrapped popover.
+  const long = 'ต้มยำกุ้งน้ำข้นใส่นมสดเยอะๆพริกสิบเม็ดกินตอนเที่ยงคืนที่ร้านข้างทาง'.slice(0, 60)
+  await guest.getByRole('button', { name: '“ข้าวมันไก่”' }).click()
+  await guest.getByPlaceholder('เช่น ต้มยำกุ้ง').fill(long)
+  await guest.keyboard.press('Enter')
+  await expect(guest.getByRole('dialog')).toHaveCount(0)
+  await dragToTable(guest)
+  const tag = host.getByRole('button', { name: `คำใบ้ของ มิ้นท์: ${long}` })
+  const card = host.locator(`[data-card-id]`).filter({ has: tag })
+  const [t, c] = [(await tag.boundingBox())!, (await card.boundingBox())!]
+  expect(t.x).toBeGreaterThanOrEqual(c.x - 1)
+  expect(t.x + t.width).toBeLessThanOrEqual(c.x + c.width + 1)
+  await tag.click()
+  const pop = host.getByRole('tooltip')
+  await expect(pop).toContainText(long)
+  const b = (await pop.boundingBox())!
+  expect(b.width).toBeLessThanOrEqual(230)
+  await host.screenshot({ path: 'docs/screenshots/desktop-clue-popover.png' })
+  await host.mouse.click(5, 5)
+  await expect(pop).toHaveCount(0)
 })

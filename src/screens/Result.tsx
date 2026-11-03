@@ -124,7 +124,7 @@ export function Result() {
               {r.owner && <PlayerAvatar player={r.owner} size="sm" />}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold">{r.owner?.name ?? 'ผู้เล่น'}</p>
-                <p className="truncate text-sm text-ink-muted">
+                <p className="line-clamp-2 text-sm text-ink-muted [overflow-wrap:anywhere]">
                   {r.card.is_wrong === null ? 'ไม่ทันได้เปิด · ' : ''}
                   {r.card.clue ? `“${r.card.clue}”` : 'ไม่ได้ใส่คำใบ้'}
                 </p>

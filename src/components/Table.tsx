@@ -1,5 +1,6 @@
 import { motion, useReducedMotion } from 'motion/react'
-import { forwardRef, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { paperSpring } from '../lib/motion'
 import type { BoardCard, Player } from '../lib/types'
 import type { Ghost } from '../store/roomStore'
@@ -254,22 +255,61 @@ export const Table = forwardRef<HTMLDivElement, Props>(function Table(
 })
 
 function ClueTag({ clue, name, open, onToggle, mine }: { clue: string | null; name?: string; open: boolean; onToggle: () => void; mine: boolean }) {
+  const ref = useRef<HTMLButtonElement>(null)
+  const [rect, setRect] = useState<DOMRect | null>(null)
+
+  // The full clue opens in a fixed popover so it can't be clipped by the scrolling row.
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return setRect(null)
+    setRect(ref.current.getBoundingClientRect())
+    const close = () => onToggle()
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  if (!clue) return <div className={mine ? 'mt-5' : 'mt-2'} />
+  const W = 220
+  const below = rect ? rect.bottom + 140 < window.innerHeight : true
   return (
-    <div className={`relative flex justify-center ${mine ? 'mt-5' : 'mt-2'}`}>
-      {clue ? (
-        <button
-          type="button"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={onToggle}
-          className={`max-w-full rounded-[6px] border border-line bg-surface px-1.5 py-0.5 text-[11px] leading-tight shadow-sm ${
-            open ? 'absolute top-0 z-20 w-40 text-left text-sm whitespace-normal' : 'truncate'
-          }`}
-          style={{ rotate: open ? '0deg' : '-1.5deg' }}
-          aria-label={`คำใบ้ของ ${name ?? ''}: ${clue}`}
-        >
-          {clue}
-        </button>
-      ) : null}
+    <div className={`flex justify-center ${mine ? 'mt-5' : 'mt-2'}`}>
+      <button
+        ref={ref}
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={onToggle}
+        className="max-w-full rounded-[6px] border border-line bg-surface px-1.5 py-0.5 text-center text-[11px] leading-snug [overflow-wrap:anywhere] shadow-sm"
+        style={{ rotate: '-1.5deg' }}
+        aria-label={`คำใบ้ของ ${name ?? ''}: ${clue}`}
+        aria-expanded={open}
+      >
+        {/* Clamp on an inner box so the padding can't show a sliver of the third line. */}
+        <span className="line-clamp-2">{clue}</span>
+      </button>
+      {open &&
+        rect &&
+        createPortal(
+          <div
+            role="tooltip"
+            onPointerDown={(e) => e.stopPropagation()}
+            className="fixed z-50 rounded-btn border border-line bg-surface px-3 py-2 text-sm leading-normal [overflow-wrap:anywhere] shadow-lift"
+            style={{
+              width: W,
+              left: Math.max(8, Math.min(window.innerWidth - W - 8, rect.left + rect.width / 2 - W / 2)),
+              ...(below ? { top: rect.bottom + 6 } : { bottom: window.innerHeight - rect.top + 6 }),
+            }}
+          >
+            <p className="mb-0.5 text-xs font-bold text-ink-muted">คำใบ้ของ {name ?? 'ผู้เล่น'}</p>
+            {clue}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

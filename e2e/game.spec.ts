@@ -217,4 +217,14 @@ test('how-to slides and 404', async ({ browser }) => {
   await p.getByRole('button', { name: 'เข้าห้อง' }).click()
   await expect(p.getByText('ไม่เจอห้องนี้ ลองเช็กโค้ดอีกทีนะ')).toBeVisible()
   await shot(p, '26-room-not-found')
+
+  // Light / night toggle in the header, remembered across reloads.
+  await p.goto('/')
+  await p.getByRole('button', { name: 'เปลี่ยนเป็นโหมดกลางคืน' }).click()
+  await expect(p.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await shot(p, '27-home-night')
+  await p.reload()
+  await expect(p.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await p.getByRole('button', { name: 'เปลี่ยนเป็นโหมดสว่าง' }).click()
+  await expect(p.locator('html')).toHaveAttribute('data-theme', 'light')
 })

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { Card } from '../components/Card'
 import { IconBack } from '../components/icons'
 import { PrimaryButton } from '../components/PrimaryButton'
-import { MuteButton } from '../components/RoomHeader'
+import { MuteButton, ThemeButton } from '../components/RoomHeader'
 import { ScaleLine } from '../components/TopicBar'
 import { PLAYER_COLORS } from '../lib/players'
 
@@ -141,7 +141,8 @@ export function HowToPage() {
           <IconBack />
         </Link>
         <h1 className="text-lg font-bold">วิธีเล่น</h1>
-        <div className="-mr-3">
+        <div className="-mr-3 flex">
+          <ThemeButton />
           <MuteButton />
         </div>
       </header>

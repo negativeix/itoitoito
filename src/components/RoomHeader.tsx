@@ -1,7 +1,8 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import { sound } from '../lib/sound'
+import { applyThemePref, isDarkTheme, subscribeTheme } from '../lib/theme'
 import { HowTo } from '../screens/HowTo'
-import { IconHelp, IconMore, IconMuted, IconSound } from './icons'
+import { IconHelp, IconMoon, IconMore, IconMuted, IconSound, IconSun } from './icons'
 import { Sheet } from './Sheet'
 
 export function MuteButton() {
@@ -15,6 +16,21 @@ export function MuteButton() {
       onClick={() => sound.setMuted(!muted)}
     >
       {muted ? <IconMuted /> : <IconSound />}
+    </button>
+  )
+}
+
+/** Light / night table toggle; overrides the OS setting once tapped. */
+export function ThemeButton() {
+  const dark = useSyncExternalStore(subscribeTheme, isDarkTheme)
+  return (
+    <button
+      type="button"
+      className="grid size-12 place-items-center rounded-full text-ink-muted hover:text-ink"
+      aria-label={dark ? 'เปลี่ยนเป็นโหมดสว่าง' : 'เปลี่ยนเป็นโหมดกลางคืน'}
+      onClick={() => applyThemePref(dark ? 'light' : 'dark')}
+    >
+      {dark ? <IconSun /> : <IconMoon />}
     </button>
   )
 }
@@ -38,6 +54,7 @@ export function RoomHeader({ code, menu }: { code?: string; menu?: ReactNode }) 
             <IconMore />
           </button>
         )}
+        <ThemeButton />
         <MuteButton />
       </div>
       <Sheet open={help} onClose={() => setHelp(false)} title="วิธีเล่น">

@@ -103,6 +103,12 @@ export function useRoomConnection(roomId: string | null, userId: string | null) 
       .on('presence', { event: 'sync' }, () => {
         store().set({ online: Object.keys(ch.presenceState()) })
       })
+      // SUBSCRIBED can arrive before the server is actually streaming postgres_changes; anything
+      // committed in between (e.g. a guest joining right after the room is created) would be missed.
+      // Refetch once the server confirms the changes feed is live.
+      .on('system', {}, (payload: { extension?: string; status?: string }) => {
+        if (payload?.extension === 'postgres_changes' && payload.status === 'ok') refresh()
+      })
       .on('broadcast', { event: 'drag' }, ({ payload }) => {
         const { card_id, index } = payload as { card_id: string; index: number | null }
         store().setGhost(card_id, index)
@@ -113,6 +119,7 @@ export function useRoomConnection(roomId: string | null, userId: string | null) 
           store().set({ connection: 'online' })
           void ch.track({ at: Date.now() })
           refresh()
+          setTimeout(refresh, 3000) // fallback if the system "ok" message never comes
           beat()
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           store().set({ connection: 'reconnecting' })

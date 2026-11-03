@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { CodeInput } from '../components/CodeInput'
 import { NameField } from '../components/NameField'
 import { PrimaryButton } from '../components/PrimaryButton'
-import { MuteButton } from '../components/RoomHeader'
+import { MuteButton, ThemeButton } from '../components/RoomHeader'
 import { Sheet } from '../components/Sheet'
 import { ThreadCoil } from '../components/ThreadCoil'
 import { savedName, saveName } from '../lib/name'
@@ -84,6 +84,7 @@ export function Home() {
   return (
     <main className="safe-x safe-top safe-bottom mx-auto flex min-h-dvh max-w-lg flex-col">
       <div className="-mr-3 flex justify-end">
+        <ThemeButton />
         <MuteButton />
       </div>
       <div className="flex flex-1 flex-col items-center justify-center py-6 text-center">

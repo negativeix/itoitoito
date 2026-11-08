@@ -189,10 +189,17 @@ describe('ใครไม่รู้: guessing and scoring', () => {
     expect(s.phase).toBe('guess_wrong')
     expect(s.wrong_guesses).toEqual([{ p: pid, rule: wrong }])
     expect(JSON.stringify(s)).not.toContain(`"rule":${rule}`)
-    await call(others[0], 'iknow_pass_guess', { p_room: g.roomId })
+    // Only the next player in seat order (or the host) takes the chance.
+    const order = g.ps.filter((x) => x.id !== s.keeper_id).sort((x, y) => x.seat - y.seat)
+    const after = order.find((x) => x.seat > order.find((y) => y.id === pid)!.seat) ?? order[0]
+    const nextUser = g.byPlayer(after.id)
+    const notNext = g.users.find((u) => u !== nextUser && u !== g.users[0])
+    if (notNext) await expectCode(call(notNext, 'iknow_pass_guess', { p_room: g.roomId }), 'not_your_turn')
+    await call(nextUser, 'iknow_pass_guess', { p_room: g.roomId })
     s = await state(g.roomId)
     expect(s.phase).toBe('guessing')
     const next = g.byPlayer(s.guesser_id)
+    expect(next).toBe(nextUser)
     expect(next).not.toBe(p)
     expect(next).not.toBe(g.keeper)
     const opts2 = (await call<{ guess_options: number[] }>(next, 'iknow_secret', { p_room: g.roomId })).guess_options

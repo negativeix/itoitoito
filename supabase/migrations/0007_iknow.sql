@@ -594,18 +594,23 @@ begin
   perform public._ik_touch(p_room);
 end $$;
 
--- After a wrong guess, anyone in the round moves the chance on to the next player.
+-- After a wrong guess the chance goes round in seat order: the next player takes it
+-- (the host may pass it on for someone who isn't at the screen).
 create or replace function public.iknow_pass_guess(p_room uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare
   r rooms := public._lock_room(p_room);
   me players := public._my_player(p_room);
   s iknow_state := public._ik_state(p_room);
+  v_next uuid := public._ik_next(p_room, s.guesser_id, array[s.keeper_id]);
 begin
   if s.phase <> 'guess_wrong' then
     raise exception 'wrong_phase';
   end if;
-  perform public._ik_start_guess(p_room, public._ik_next(p_room, s.guesser_id, array[s.keeper_id]));
+  if me.id <> v_next and me.user_id <> r.host_user_id then
+    raise exception 'not_your_turn';
+  end if;
+  perform public._ik_start_guess(p_room, v_next);
   perform public._ik_touch(p_room);
 end $$;
 

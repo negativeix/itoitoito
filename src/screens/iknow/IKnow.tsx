@@ -556,7 +556,7 @@ function GuessWait({ ik, hand, name, isKeeper }: Ctx) {
   )
 }
 
-function GuessWrong({ room, ik, me, name, players }: Ctx) {
+function GuessWrong({ room, ik, me, name, players, isHost }: Ctx) {
   const { busy, run } = useRun()
   const last = ik.wrong_guesses.at(-1)
   const next = nextBySeat(players, ik.guesser_id, [ik.keeper_id])
@@ -585,10 +585,23 @@ function GuessWrong({ room, ik, me, name, players }: Ctx) {
         <WrongSoFar ik={ik} name={name} />
       </div>
       <BottomBar>
-        <StatusLine>ต่อไป: {next ? name(next.id) : 'คนถัดไป'} ทาย</StatusLine>
-        <PrimaryButton className={PURPLE_BTN} disabled={busy || me.spectating} onClick={() => run(() => api.ik.passGuess(room))}>
-          {next?.id === me.id ? 'ทายต่อ' : `ส่งต่อให้ ${next ? name(next.id) : 'คนถัดไป'} ทาย`}
-        </PrimaryButton>
+        {next?.id === me.id ? (
+          <>
+            <StatusLine tone="thread">ถึงคิวคุณทายต่อ</StatusLine>
+            <PrimaryButton className={PURPLE_BTN} disabled={busy} onClick={() => run(() => api.ik.passGuess(room))}>
+              ทายต่อ
+            </PrimaryButton>
+          </>
+        ) : (
+          <>
+            <StatusLine>รอ {next ? name(next.id) : 'คนถัดไป'} กดทายต่อ</StatusLine>
+            {isHost && (
+              <PrimaryButton variant="ghost" className="mx-auto underline underline-offset-4" disabled={busy} onClick={() => run(() => api.ik.passGuess(room))}>
+                ส่งต่อให้ {next ? name(next.id) : 'คนถัดไป'} ทายเลย
+              </PrimaryButton>
+            )}
+          </>
+        )}
       </BottomBar>
     </>
   )

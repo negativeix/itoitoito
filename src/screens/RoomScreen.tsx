@@ -12,6 +12,7 @@ import { ensureSession, isConfigured, supabase } from '../lib/supabase'
 import { useWakeLock } from '../lib/wakeLock'
 import { myPlayer, useRoom } from '../store/roomStore'
 import { toast } from '../store/toastStore'
+import { IKnow } from './iknow/IKnow'
 import { Lobby } from './Lobby'
 import { Play } from './Play'
 import { Result } from './Result'
@@ -157,7 +158,12 @@ function InRoom({ roomId, userId, onExit }: { roomId: string; userId: string; on
 
   const menu = (
     <div className="flex flex-col gap-3 pb-2">
-      {isHost && room.status === 'placing' && (
+      {isHost && room.game === 'iknow' && (room.status === 'placing' || room.status === 'result') && (
+        <PrimaryButton variant="secondary" onClick={() => api.ik.endGame(roomId).catch((e) => toast(e.message, 'error'))}>
+          จบเกม ดูอันดับ
+        </PrimaryButton>
+      )}
+      {isHost && room.game === 'ito' && room.status === 'placing' && (
         <PrimaryButton variant="secondary" onClick={() => api.revealAll(roomId).catch((e) => toast(e.message, 'error'))}>
           เปิดการ์ดที่เหลือทั้งหมด
         </PrimaryButton>
@@ -173,25 +179,29 @@ function InRoom({ roomId, userId, onExit }: { roomId: string; userId: string; on
     </div>
   )
 
+  const iknow = room.game === 'iknow' && room.status !== 'lobby'
   let screen
-  switch (room.status) {
-    case 'lobby':
-      screen = <Lobby />
-      break
-    case 'choosing_theme':
-      screen = <Topic />
-      break
-    case 'placing':
-      screen = <Play />
-      break
-    default:
-      screen = <Result />
+  if (iknow) screen = <IKnow />
+  else {
+    switch (room.status) {
+      case 'lobby':
+        screen = <Lobby />
+        break
+      case 'choosing_theme':
+        screen = <Topic />
+        break
+      case 'placing':
+        screen = <Play />
+        break
+      default:
+        screen = <Result />
+    }
   }
 
   return (
-    <main className="safe-x safe-top mx-auto flex min-h-dvh max-w-lg flex-col">
+    <main className={`safe-x safe-top mx-auto flex min-h-dvh w-full max-w-lg flex-col ${iknow ? 'lg:max-w-6xl' : ''}`}>
       <ConnectionBanner show={connection === 'reconnecting'} />
-      <RoomHeader code={room.code} menu={menu} />
+      <RoomHeader code={room.code} menu={menu} game={room.game} />
       <fieldset disabled={connection === 'reconnecting'} className="contents">
         {screen}
       </fieldset>

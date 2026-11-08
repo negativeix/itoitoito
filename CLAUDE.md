@@ -39,12 +39,13 @@ Vite + React 18 + TypeScript + Tailwind CSS v4 + `motion` + @dnd-kit + Zustand +
 - **Free flipping (real-life flow, replaces the plan's lock → auto-reveal).** Cards are flipped one by one from the left of the table, without waiting for everyone to place (`flip_card`, migration 0004). The client only lets the owner of the leftmost face-down table card flip it, behind a two-tap confirm; no flipping from the hand (the server still accepts any own card). A flipped card joins the revealed row; face-down cards can only sit to its right (`move_card`). A wrong card never ends the round (migration 0006): play goes on until every card is flipped, then the round is judged. Classic counts the snaps; Level Up loses a heart per wrong card (never below 0) and 0 hearts means game over once the round is played out. `reveal_all` is a host shortcut.
 - **Topics are custom-first.** Any player sets the topic (`set_theme`); `src/data/themes.ts` is only a client-side suggestion list (no themes table, no reroll votes, no category setting). Played topics are kept per room in `rooms.theme_history` for "วงนี้เคยเล่น".
 - Two players dropping at the same spot before seeing each other's move can get equal positions; ties break by card id identically on every client, and players can simply move again.
+- **Second game: ใครไม่รู้ (`rooms.game = 'iknow'`, migration 0007).** Same rooms/players; its own tables: `iknow_state` (public, realtime; includes the turn player's live `staging`), `iknow_hands` (owner-only, never published), `iknow_deck` and `iknow_secret` (no policies; the rule and options are handed out only by RPC `iknow_secret`). The keeper judges by hand (`iknow_judge`), the server never checks rules. Cards are ints 0..71 (`src/lib/iknow.ts`); rule ids 1..60 with text in `src/data/iknowRules.ts` (keep `_ik_rule_count` in sync). Score: guesser +2, most cards left −2, next −1, keeper not scored; everyone keeps once per game.
 - Zustand selectors must return stable references — derive arrays with `useMemo` outside the selector.
 - Small red/green text uses `--thread-ink` / `--success-ink` / `--danger-ink` (WCAG AA); brand `--thread` stays for large elements.
 
 ## Testing
 - `npm run test:unit`, `npm run test:db` (needs `npx supabase start`), `npx playwright test` (starts its own server with `--mode e2e`, which reads `.env.e2e.local` → local Supabase; never run tests against production). Run DB tests a few seconds after `db reset` (realtime restarts).
-- Migrations 0001–0004 are applied in production (0005 raises the clue limit to 60, 0006 plays the round out after a snap): never edit them; add a new migration file instead.
+- Migrations 0001–0004 are applied in production (0005 raises the clue limit to 60, 0006 plays the round out after a snap, 0007 adds ใครไม่รู้): never edit them; add a new migration file instead.
 - Any change to RLS or RPCs must keep `supabase/tests/rls.test.ts` green.
 
 ## Design quick reference (section 2)

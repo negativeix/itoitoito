@@ -2,6 +2,7 @@ import type { Theme } from '../data/themes'
 
 export type RoomStatus = 'lobby' | 'choosing_theme' | 'placing' | 'result' | 'game_over'
 export type GameMode = 'classic' | 'levelup'
+export type GameKind = 'ito' | 'iknow'
 
 export type RoundResult = {
   wrong: number
@@ -18,6 +19,7 @@ export type Room = {
   code: string
   status: RoomStatus
   mode: GameMode
+  game: GameKind
   host_user_id: string
   cards_per_player: number
   level: number

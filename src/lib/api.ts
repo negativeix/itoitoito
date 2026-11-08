@@ -1,4 +1,4 @@
-import type { GameMode } from './types'
+import type { GameKind, GameMode } from './types'
 import { supabase } from './supabase'
 
 const MESSAGES: Record<string, string> = {
@@ -30,6 +30,10 @@ const MESSAGES: Record<string, string> = {
   invalid_position: 'วางตรงนั้นไม่ได้ การ์ดคว่ำต้องอยู่ทางขวาของการ์ดที่เปิดแล้ว',
   no_free_code: 'ตอนนี้ห้องเต็มระบบ ลองใหม่อีกครั้ง',
   network: 'เน็ตหลุด ลองอีกครั้งนะ',
+  need_three_players: 'ต้องมีผู้เล่นอย่างน้อย 3 คน (ผู้คุม 1 + ผู้เล่น 2)',
+  not_keeper: 'ปุ่มนี้สำหรับผู้คุมกฎ',
+  invalid_rule: 'เลือกกฎนี้ไม่ได้',
+  nothing_staged: 'เลือกการ์ดมาเรียงก่อนนะ',
 }
 
 export class ApiError extends Error {
@@ -81,4 +85,19 @@ export const api = {
   setClue: (cardId: string, clue: string) => rpc('set_clue', { p_card: cardId, p_clue: clue }),
   flipCard: (roomId: string, cardId: string) => rpc('flip_card', { p_room: roomId, p_card: cardId }),
   revealAll: (roomId: string) => rpc('reveal_all', { p_room: roomId }),
+  setGame: (roomId: string, game: GameKind) => rpc('set_game', { p_room: roomId, p_game: game }),
+  ik: {
+    start: (roomId: string) => rpc('iknow_start', { p_room: roomId }),
+    nextRound: (roomId: string) => rpc('iknow_next_round', { p_room: roomId }),
+    endGame: (roomId: string) => rpc('iknow_end_game', { p_room: roomId }),
+    pickRule: (roomId: string, rule: number) => rpc('iknow_pick_rule', { p_room: roomId, p_rule: rule }),
+    pickStart: (roomId: string, card: number) => rpc('iknow_pick_start', { p_room: roomId, p_card: card }),
+    stage: (roomId: string, cards: number[]) => rpc('iknow_stage', { p_room: roomId, p_cards: cards }),
+    submit: (roomId: string) => rpc('iknow_submit', { p_room: roomId }),
+    judge: (roomId: string, ok: boolean) => rpc('iknow_judge', { p_room: roomId, p_ok: ok }),
+    cantPlay: (roomId: string) => rpc('iknow_cant_play', { p_room: roomId }),
+    check: (roomId: string, card: number | null) => rpc('iknow_check', { p_room: roomId, p_card: card }),
+    guess: (roomId: string, rule: number) => rpc('iknow_guess', { p_room: roomId, p_rule: rule }),
+    passGuess: (roomId: string) => rpc('iknow_pass_guess', { p_room: roomId }),
+  },
 }

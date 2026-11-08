@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { IkSecret, IkState } from '../lib/iknow'
 import type { BoardCard, HandCard, Player, Room } from '../lib/types'
 
 export type Connection = 'connecting' | 'online' | 'reconnecting'
@@ -19,6 +20,10 @@ type RoomState = {
   pending: Record<string, number | null>
   /** Set when this device was removed from the room (kicked, room deleted). */
   removed: boolean
+  /** ใครไม่รู้: public state, my hand (card codes) and whatever the server lets me see. */
+  ik: IkState | null
+  ikHand: number[]
+  ikSecret: IkSecret
 
   setSnapshot: (s: { room: Room; players: Player[]; board: BoardCard[]; hand: HandCard[] }) => void
   patchRoom: (room: Partial<Room> & { id: string }) => void
@@ -43,6 +48,9 @@ const empty = {
   ghosts: {},
   pending: {},
   removed: false,
+  ik: null as IkState | null,
+  ikHand: [] as number[],
+  ikSecret: {} as IkSecret,
 }
 
 export const useRoom = create<RoomState>((set, get) => ({

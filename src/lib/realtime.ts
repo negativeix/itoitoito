@@ -4,6 +4,7 @@ import { useRoom } from '../store/roomStore'
 import { toast } from '../store/toastStore'
 import { api } from './api'
 import { supabase } from './supabase'
+import type { IkSecret, IkState } from './iknow'
 import type { BoardCard, HandCard, Player, Room } from './types'
 
 let channel: RealtimeChannel | null = null
@@ -37,6 +38,34 @@ export async function loadSnapshot(roomId: string) {
     return
   }
   store.setSnapshot({ room: r.data as Room, players, board: (b.data ?? []) as BoardCard[], hand: (h.data ?? []) as HandCard[] })
+  if ((r.data as Room).game === 'iknow') await loadIknow(roomId)
+  else store.set({ ik: null, ikHand: [], ikSecret: {} })
+}
+
+/** ใครไม่รู้: public state plus my private view (hand, and the secret if I'm keeper/guesser). */
+export async function loadIknow(roomId: string) {
+  const { data } = await supabase.from('iknow_state').select('*').eq('room_id', roomId).maybeSingle()
+  useRoom.getState().set({ ik: (data as IkState | null) ?? null })
+  await loadIknowPrivate(roomId)
+}
+
+let privateSeq = 0
+export async function loadIknowPrivate(roomId: string) {
+  const seq = ++privateSeq
+  const ik = useRoom.getState().ik
+  if (!ik) {
+    useRoom.getState().set({ ikHand: [], ikSecret: {} })
+    return
+  }
+  const [h, s] = await Promise.all([
+    supabase.from('iknow_hands').select('card').eq('room_id', roomId),
+    supabase.rpc('iknow_secret', { p_room: roomId }),
+  ])
+  if (seq !== privateSeq) return // a newer refresh is on its way
+  useRoom.getState().set({
+    ikHand: (h.data ?? []).map((x) => x.card as number).sort((a, b) => a - b),
+    ikSecret: (s.data as IkSecret | null) ?? {},
+  })
 }
 
 /** Subscribes to a room: Postgres changes, presence, drag broadcast, heartbeats, reconnect (§4.5). */
@@ -99,6 +128,15 @@ export function useRoomConnection(roomId: string | null, userId: string | null) 
         }
         const c = payload.new as BoardCard
         if (c.room_id === roomId) store().upsertCard(c)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'iknow_state', filter: `room_id=eq.${roomId}` }, (payload) => {
+        if (payload.eventType === 'DELETE') return
+        const next = payload.new as IkState
+        const prev = store().ik
+        store().set({ ik: next })
+        // Staging-only updates don't touch hands or secrets.
+        if (!prev || prev.phase !== next.phase || prev.round !== next.round || prev.turn_no !== next.turn_no || prev.table_cards.length !== next.table_cards.length || prev.guesser_id !== next.guesser_id)
+          void loadIknowPrivate(roomId)
       })
       .on('presence', { event: 'sync' }, () => {
         store().set({ online: Object.keys(ch.presenceState()) })

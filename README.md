@@ -20,6 +20,8 @@
 
 It's cooperative — the whole table wins or loses together. 2–10 players.
 
+**Also in the box: ใครไม่รู้ (I Know… You Don't).** One player secretly picks a rule; everyone else lays animal cards and the keeper says pass or fail. Empty your hand, then guess the rule. 3–10 players, pick it in the lobby.
+
 ## A quick tour
 
 <table>

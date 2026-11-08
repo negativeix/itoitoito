@@ -10,7 +10,7 @@ import { StatusLine } from '../components/StatusLine'
 import { api } from '../lib/api'
 import { haptics } from '../lib/haptics'
 import { PLAYER_COLORS } from '../lib/players'
-import type { GameMode, Player } from '../lib/types'
+import type { GameKind, GameMode, Player } from '../lib/types'
 import { myPlayer, useRoom } from '../store/roomStore'
 import { toast } from '../store/toastStore'
 
@@ -52,7 +52,7 @@ export function Lobby() {
     setStarting(true)
     haptics.tap()
     try {
-      await api.startRound(room.id)
+      await (iknow ? api.ik.start(room.id) : api.startRound(room.id))
     } catch (e) {
       fail(e as Error)
     } finally {
@@ -60,8 +60,15 @@ export function Lobby() {
     }
   }
 
+  const pickGame = (game: GameKind) => {
+    useRoom.getState().patchRoom({ id: room.id, game })
+    api.setGame(room.id, game).catch(fail)
+  }
+
   const taken = new Set(players.filter((p) => p.id !== me.id).map((p) => p.color))
-  const enough = players.length >= 2
+  const iknow = room.game === 'iknow'
+  const need = iknow ? 3 : 2
+  const enough = players.length >= need
 
   return (
     <>
@@ -108,22 +115,40 @@ export function Lobby() {
       <section className="mt-6 flex flex-col gap-4">
         <h2 className="text-lg font-bold">ตั้งค่าเกม {!isHost && <span className="text-sm font-medium text-ink-muted">(เจ้าของห้องเป็นคนตั้ง)</span>}</h2>
         <div>
-          <p className="mb-1.5 text-sm font-bold text-ink-muted">โหมด</p>
-          <Segmented<GameMode>
-            label="โหมด"
-            value={room.mode}
+          <p className="mb-1.5 text-sm font-bold text-ink-muted">เกม</p>
+          <Segmented<GameKind>
+            label="เกม"
+            value={room.game}
             disabled={!isHost}
-            onChange={(mode) => settings({ mode })}
+            onChange={pickGame}
             options={[
-              { value: 'classic', label: 'ปกติ' },
-              { value: 'levelup', label: 'ท้าทาย (Level Up)' },
+              { value: 'ito', label: 'ito' },
+              { value: 'iknow', label: 'ใครไม่รู้' },
             ]}
           />
-          <p className="mt-1.5 text-xs text-ink-muted">
-            {room.mode === 'classic' ? 'เล่นเป็นรอบๆ เรียงให้ถูกหมดคือชนะ' : 'เริ่ม 3 หัวใจ เลเวลยิ่งสูงยิ่งได้การ์ดเยอะ ผิดใบละ 1 หัวใจ'}
-          </p>
+          {iknow && (
+            <p className="mt-1.5 text-xs text-ink-muted">ผู้คุมรู้กฎลับคนเดียว คนอื่นลงการ์ดสัตว์ให้ผ่าน แล้วแข่งกันทายว่ากฎคืออะไร · 3–10 คน</p>
+          )}
         </div>
-        {room.mode === 'classic' && (
+        {!iknow && (
+          <div>
+            <p className="mb-1.5 text-sm font-bold text-ink-muted">โหมด</p>
+            <Segmented<GameMode>
+              label="โหมด"
+              value={room.mode}
+              disabled={!isHost}
+              onChange={(mode) => settings({ mode })}
+              options={[
+                { value: 'classic', label: 'ปกติ' },
+                { value: 'levelup', label: 'ท้าทาย (Level Up)' },
+              ]}
+            />
+            <p className="mt-1.5 text-xs text-ink-muted">
+              {room.mode === 'classic' ? 'เล่นเป็นรอบๆ เรียงให้ถูกหมดคือชนะ' : 'เริ่ม 3 หัวใจ เลเวลยิ่งสูงยิ่งได้การ์ดเยอะ ผิดใบละ 1 หัวใจ'}
+            </p>
+          </div>
+        )}
+        {!iknow && room.mode === 'classic' && (
           <div>
             <p className="mb-1.5 text-sm font-bold text-ink-muted">การ์ดต่อคน</p>
             <Segmented<number>
@@ -135,13 +160,13 @@ export function Lobby() {
             />
           </div>
         )}
-        <p className="text-sm text-ink-muted">หัวข้อแต่ละรอบ ทุกคนในวงช่วยกันคิดเองได้ หรือเลือกจากไอเดียที่แอปแนะนำ</p>
+        {!iknow && <p className="text-sm text-ink-muted">หัวข้อแต่ละรอบ ทุกคนในวงช่วยกันคิดเองได้ หรือเลือกจากไอเดียที่แอปแนะนำ</p>}
       </section>
 
       <BottomBar>
         {isHost ? (
           <>
-            <StatusLine>{enough ? `พร้อมเล่น ${players.length} คน` : 'ต้องมีผู้เล่นอย่างน้อย 2 คน ชวนเพื่อนด้วยโค้ดหรือ QR'}</StatusLine>
+            <StatusLine>{enough ? `พร้อมเล่น ${players.length} คน` : `ต้องมีผู้เล่นอย่างน้อย ${need} คน ชวนเพื่อนด้วยโค้ดหรือ QR`}</StatusLine>
             <PrimaryButton onClick={start} disabled={!enough || starting}>
               {starting ? 'กำลังเริ่ม…' : 'เริ่มเกม'}
             </PrimaryButton>

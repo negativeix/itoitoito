@@ -2,6 +2,8 @@ import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import { sound } from '../lib/sound'
 import { applyThemePref, isDarkTheme, subscribeTheme } from '../lib/theme'
 import { HowTo } from '../screens/HowTo'
+import { IKnowHowTo } from '../screens/iknow/HowTo'
+import type { GameKind } from '../lib/types'
 import { IconHelp, IconMoon, IconMore, IconMuted, IconSound, IconSun } from './icons'
 import { Sheet } from './Sheet'
 
@@ -36,13 +38,13 @@ export function ThemeButton() {
 }
 
 /** Top row on every room screen: room code, help, sound (always top-right, §2.6) and menu. */
-export function RoomHeader({ code, menu }: { code?: string; menu?: ReactNode }) {
+export function RoomHeader({ code, menu, game = 'ito' }: { code?: string; menu?: ReactNode; game?: GameKind }) {
   const [help, setHelp] = useState(false)
   const [open, setOpen] = useState(false)
   return (
     <header className="flex h-12 items-center justify-between">
       <div className="flex items-center gap-2">
-        <span className="num text-2xl leading-none font-bold">ito</span>
+        {game === 'iknow' ? <span className="text-xl leading-none font-bold">ใครไม่รู้</span> : <span className="num text-2xl leading-none font-bold">ito</span>}
         {code && <span className="num rounded-full border border-line bg-surface px-2.5 py-0.5 text-sm font-bold tracking-widest">{code}</span>}
       </div>
       <div className="-mr-3 flex items-center">
@@ -58,7 +60,7 @@ export function RoomHeader({ code, menu }: { code?: string; menu?: ReactNode }) 
         <MuteButton />
       </div>
       <Sheet open={help} onClose={() => setHelp(false)} title="วิธีเล่น">
-        <HowTo onDone={() => setHelp(false)} />
+        {game === 'iknow' ? <IKnowHowTo onDone={() => setHelp(false)} /> : <HowTo onDone={() => setHelp(false)} />}
       </Sheet>
       {menu && (
         <Sheet open={open} onClose={() => setOpen(false)} title="เมนู">

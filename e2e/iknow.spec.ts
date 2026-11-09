@@ -125,6 +125,8 @@ test('ใครไม่รู้: a full round, two computers and a phone', asy
   for (const p of pages) await expect(p.getByRole('heading', { name: /ทายถูก!$/ })).toBeVisible()
   await expect(a.getByText('กฎจริง ·', { exact: false })).toBeVisible()
   await expect(a.getByText('ผู้คุม · ไม่คิดคะแนนรอบนี้')).toBeVisible()
+  // The whole table stays on screen next to the reveal: start + 1 + 1 (keeper's play) + 7.
+  for (const p of pages) await expect(p.getByRole('region', { name: 'โต๊ะ' }).getByRole('img')).toHaveCount(10)
   await shot(a, 'iknow-07-result')
   await shot(c, 'iknow-07b-phone')
 

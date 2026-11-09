@@ -670,6 +670,10 @@ function RoundResult({ room, ik, isHost, hostName, name, byId, players }: Ctx) {
           )
         })}
       </ul>
+      {/* The whole table next to the reveal, so everyone can check the rule against it together. */}
+      <div className="mt-4">
+        <TableGrid cards={ik.table_cards} />
+      </div>
       <section aria-label="คะแนนรอบนี้" className="mt-4 rounded-[18px] border border-line bg-surface px-4 py-1.5">
         <div className="grid grid-cols-[minmax(0,1fr)_56px_56px] gap-2 border-b border-line py-2 text-xs font-bold text-ink-muted">
           <span>ผู้เล่น</span>

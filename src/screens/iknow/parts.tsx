@@ -154,11 +154,12 @@ export function RejectedList({ ik, byId, limit }: { ik: IkState; byId: Who['byId
   return (
     <ul className="flex flex-col gap-2.5">
       {list.map((r, i) => (
-        <li key={i} className="flex items-center gap-2">
-          <span className="w-20 shrink-0 truncate text-xs text-ink-muted">
+        <li key={i} className="flex items-start gap-2">
+          <span className="mt-1 w-20 shrink-0 truncate text-xs text-ink-muted">
             {byId(r.p)?.name ?? 'ผู้เล่น'} · ตา {r.t}
           </span>
-          <span className="flex gap-1">
+          {/* Long sets wrap onto more rows instead of running out of the box. */}
+          <span className="flex min-w-0 flex-1 flex-wrap gap-1">
             {r.cards.map((c) => (
               <AnimalCard key={c} card={c} className="w-8" faded cross />
             ))}
